@@ -1,9 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
-import shutil
-from automataenc import analizar_codigo
-
+import analizador_lexico_sintactico as analizador
 #from sintactico2 import 
 import re 
 
@@ -379,46 +377,28 @@ def cerrar_menu():
 
 
 # COMPILAR
+
 def compilar():
 
+    # Obtener código escrito en el IDE
     codigo = ide.get("1.0", "end-1c")
 
-    # Verificar que exista código
     if not codigo.strip():
         escribir_terminal("No hay código para compilar.")
         return
 
-    # Limpiar terminal antes de mostrar los resultados
     limpiar_terminal()
-    escribir_terminal("========================================")
-    escribir_terminal("        COMPILANDO CÓDIGO")
-    escribir_terminal("========================================")
-    escribir_terminal("")
 
-    try:
+    escribir_terminal("========== COMPILACIÓN ==========")
 
-        # Enviar el código directamente al autómata
-        resultados = analizar_codigo(codigo)
+    # ANÁLISIS LÉXICO Y SINTÁCTICO
+    escribir_terminal("\nINICIANDO ANÁLISIS LÉXICO Y SINTÁCTICO...\n")
 
-        # Mostrar resultados
-        if resultados:
+    resultado = analizador.analizar_codigo(codigo)
 
-            for resultado in resultados:
-                escribir_terminal(resultado)
+    escribir_terminal(resultado)
 
-        else:
-            escribir_terminal(
-                "No se encontraron instrucciones para analizar."
-            )
-
-        escribir_terminal("")
-        escribir_terminal("       FIN DE LA COMPILACIÓN")
-
-    except Exception as e:
-
-        escribir_terminal("")
-        escribir_terminal("ERROR DURANTE LA COMPILACIÓN:")
-        escribir_terminal(str(e))
+    escribir_terminal("\n========== FIN DEL ANÁLISIS ==========")
 
 
 # EJECUTAR

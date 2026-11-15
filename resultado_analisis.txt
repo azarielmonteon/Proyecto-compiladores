@@ -1,7 +1,8 @@
-ANÁLISIS LÉXICO Y SINTÁCTICO
+========== ANÁLISIS LÉXICO Y SINTÁCTICO ==========
 
 ADVERTENCIAS Y ERRORES
--
+----------------------------------------
 Error semántico línea 8: valor de tipo 'str' asignado a 'edad', declarado como 'int'.
 Error semántico línea 12: valor de tipo 'str' asignado a 'edad', declarado como 'int'.
+
 ANÁLISIS FINALIZADO CON ERRORES.

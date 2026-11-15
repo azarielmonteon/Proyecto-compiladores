@@ -1,6 +1,6 @@
 from pathlib import Path
 import sys
-
+from arbo_sintactico import NodoAST
 
 class Archivo:
 
@@ -393,14 +393,19 @@ class AnalizadorSintactico:
     def __init__(self, tokens):
         self.tokens = tokens
         self.i = 0
+
         self.advertencias = []
         self.errores = []
-        # Pila de ámbitos: el primero corresponde al ámbito global
+
+        # Pila de ámbitos
         self.ambitos = [{}]
-        # Tabla general de símbolos
-        # Conserva todas las declaraciones, incluso nombres repetidos
+
+        # Tabla de símbolos
         self.tabla = []
-    
+
+        # Árbol sintáctico AST
+        self.arbol = NodoAST("Programa")
+
     def entrar_ambito(self):
         self.ambitos.append({})
 
@@ -443,72 +448,222 @@ class AnalizadorSintactico:
         )
         return False
 
+
     def analizar(self):
-        while self.actual().tipo == "BIBLIOTECA":
+
+        # Buscar la función main
+        while self.actual().tipo != "EOF":
+
+            t = self.actual()
+
+            # Ignorar bibliotecas
+            if t.tipo == "BIBLIOTECA":
+                self.avanzar()
+                continue
+
+            # Reconocer el tipo de retorno de main
+            if t.tipo == "TIPO_DATO":
+
+                # Guardar posición actual
+                posicion = self.i
+
+                tipo = self.avanzar()
+
+                # Comprobar si después del tipo viene main
+                if (
+                    self.actual().tipo == "ID"
+                    and self.actual().valor == "main"
+                ):
+                    break
+
+                # No es la declaración de main
+                self.i = posicion
+
+            # Reconocer main
+            if t.tipo == "ID" and t.valor == "main":
+                break
+
+            self.advertencias.append(
+                f"Advertencia línea {t.linea}: "
+                f"contenido fuera de main: {t.valor!r}."
+            )
+
             self.avanzar()
 
-        if self.actual().valor != "main":
-            self.errores.append("Error sintáctico: no se encontró main().")
+        # Comprobar que se encontró main
+        if self.actual().tipo == "EOF":
+            self.errores.append(
+                "Error sintáctico: no se encontró main()."
+            )
+
             return self.advertencias, self.errores, self.tabla
 
-        self.avanzar()
-        self.esperar("DELIMITADOR", "(", "'(' después de main")
-        self.esperar("DELIMITADOR", ")", "')' después de main")
-        self.bloque()
+        # Consumir el tipo de retorno si existe
+        if self.actual().tipo == "TIPO_DATO":
+            self.avanzar()
 
+        # Consumir main
+        self.esperar("ID", "main", "main")
+
+        self.esperar(
+            "DELIMITADOR", "(", "'(' después de main"
+        )
+
+        self.esperar(
+            "DELIMITADOR", ")", "')' después de main"
+        )
+
+        # Crear nodo de función
+        nodo_main = NodoAST("Funcion", "main")
+
+        # Analizar cuerpo de main
+        bloque_main = self.bloque()
+
+        nodo_main.agregar_hijo(bloque_main)
+
+        self.arbol.agregar_hijo(nodo_main)
+
+        # Revisar contenido posterior a main
         while self.actual().tipo != "EOF":
+
             t = self.avanzar()
+
             self.advertencias.append(
-                f"Advertencia línea {t.linea}: contenido fuera de main: {t.valor!r}."
+                f"Advertencia línea {t.linea}: "
+                f"contenido fuera de main: {t.valor!r}."
             )
+
         return self.advertencias, self.errores, self.tabla
 
+
+        # Buscar main en cualquier posición
+        while self.actual().tipo != "EOF":
+
+            t = self.actual()
+
+            if t.valor == "main" and t.tipo == "ID":
+                break
+
+            if t.tipo == "BIBLIOTECA":
+                self.avanzar()
+                continue
+
+            self.advertencias.append(
+                f"Advertencia línea {t.linea}: "
+                f"contenido fuera de main: {t.valor!r}."
+            )
+
+            self.avanzar()
+
+        if self.actual().tipo == "EOF":
+            self.errores.append(
+                "Error sintáctico: no se encontró main()."
+            )
+
+            return self.advertencias, self.errores, self.tabla
+
+        # Reconocer main
+        self.avanzar()
+
+        self.esperar(
+            "DELIMITADOR", "(", "'(' después de main"
+        )
+
+        self.esperar(
+            "DELIMITADOR", ")", "')' después de main"
+        )
+
+        # Crear nodo de función
+        nodo_main = NodoAST("Funcion", "main")
+
+        # Obtener bloque
+        bloque_main = self.bloque()
+
+        nodo_main.agregar_hijo(bloque_main)
+
+        self.arbol.agregar_hijo(nodo_main)
+
+        while self.actual().tipo != "EOF":
+
+            t = self.avanzar()
+
+            self.advertencias.append(
+                f"Advertencia línea {t.linea}: "
+                f"contenido fuera de main: {t.valor!r}."
+            )
+
+        return self.advertencias, self.errores, self.tabla
+  
     def bloque(self):
+
         apertura = self.aceptar("DELIMITADOR", "{")
+
         if not apertura:
             t = self.actual()
-            self.errores.append(f"Error sintáctico línea {t.linea}: se esperaba '{{'.")
-            return
 
-        self.entrar_ambito()        
-        while self.actual().tipo != "EOF" and self.actual().valor != "}":
+            self.errores.append(
+                f"Error sintáctico línea {t.linea}: "
+                "se esperaba '{'."
+            )
+
+            return None
+
+        nodo_bloque = NodoAST("Bloque")
+
+        self.entrar_ambito()
+
+        while (
+            self.actual().tipo != "EOF"
+            and self.actual().valor != "}"
+        ):
+
             antes = self.i
             t = self.actual()
 
-            if t.tipo == "BIBLIOTECA":
-                self.advertencias.append(
-                    f"Advertencia línea {t.linea}: declare bibliotecas antes de main."
-                )
-                self.avanzar()
-            elif t.tipo == "TIPO_DATO":
-                self.declaracion()
+            nodo = None
+
+            if t.tipo == "TIPO_DATO":
+                nodo = self.declaracion()
+
             elif t.tipo == "ID" and t.valor in {"print", "printf"}:
-                self.impresion()
+                nodo = self.impresion()
+
             elif t.tipo == "PALABRA_RESERVADA" and t.valor == "if":
-                self.condicional()
+                nodo = self.condicional()
+
             elif t.tipo == "PALABRA_RESERVADA" and t.valor == "return":
-                self.retorno()
+                nodo = self.retorno()
+
             elif t.tipo == "ID":
-                self.asignacion()
+                nodo = self.asignacion()
+
             elif t.valor == "{":
-                self.bloque()
+                nodo = self.bloque()
+
             else:
                 self.avanzar()
+
                 self.errores.append(
-                    f"Error sintáctico línea {t.linea}: token inesperado {t.valor!r}."
+                    f"Error sintáctico línea {t.linea}: "
+                    f"token inesperado {t.valor!r}."
                 )
+
+            if nodo is not None:
+                nodo_bloque.agregar_hijo(nodo)
 
             if self.i == antes:
                 self.avanzar()
 
         if not self.aceptar("DELIMITADOR", "}"):
             self.errores.append(
-                f"Error sintáctico: falta '}}' para cerrar el bloque de línea "
-                f"{apertura.linea}."
+                "Error sintáctico: falta '}' para cerrar el bloque."
             )
+
         self.salir_ambito()
 
-        
+        return nodo_bloque
+
+   
     def condicional(self):
         # Consumir la palabra reservada if
         self.avanzar()
@@ -809,48 +964,18 @@ def ejecutar(ruta_entrada, ruta_salida=None):
 
 #"""
 def ejecutar(ruta_entrada, ruta_salida=None):
+
     ruta_entrada = Path(ruta_entrada)
+
     ruta_salida = Path(ruta_salida) if ruta_salida else (
         ruta_entrada.parent / "resultado_analisis.txt"
     )
 
     archivo = Archivo()
+
     codigo = archivo.leer_archivo(ruta_entrada)
 
-    tokens, errores_lexicos = AnalizadorLexico().analizar(codigo)
-    sintactico = AnalizadorSintactico(tokens)
-
-    advertencias, errores_sintacticos, tabla = sintactico.analizar()
-
-    salida = [
-        "ANÁLISIS LÉXICO Y SINTÁCTICO",
-        "\nADVERTENCIAS Y ERRORES",
-        "-"
-    ]
-
-    # Reunir todas las advertencias y errores
-    todos_los_mensajes = (
-        advertencias +
-        errores_lexicos +
-        errores_sintacticos
-    )
-
-    if todos_los_mensajes:
-        salida.extend(todos_los_mensajes)
-    else:
-        salida.append("Sin advertencias.")
-
-    # Determinar el resultado del análisis
-    if errores_lexicos or errores_sintacticos:
-        salida.append("ANÁLISIS FINALIZADO CON ERRORES.")
-
-    elif advertencias:
-        salida.append("ANÁLISIS FINALIZADO CON ADVERTENCIAS.")
-
-    else:
-        salida.append("ANÁLISIS FINALIZADO CORRECTAMENTE.")
-
-    reporte = "\n".join(salida)
+    reporte = analizar_codigo(codigo)
 
     print(reporte)
 
@@ -859,6 +984,44 @@ def ejecutar(ruta_entrada, ruta_salida=None):
     return reporte
 #"""
 
+def analizar_codigo(codigo):
+
+    # 1. ANÁLISIS LÉXICO
+    tokens, errores_lexicos = AnalizadorLexico().analizar(codigo)
+
+    # 2. ANÁLISIS SINTÁCTICO
+    sintactico = AnalizadorSintactico(tokens)
+
+    advertencias, errores_sintacticos, tabla = sintactico.analizar()
+
+    # 3. GENERAR REPORTE
+    salida = [
+        "ADVERTENCIAS Y ERRORES",
+        "----------------------------------------"
+    ]
+
+    todos_los_mensajes = (
+        errores_lexicos +
+        errores_sintacticos +
+        advertencias
+    )
+
+    if todos_los_mensajes:
+        salida.extend(todos_los_mensajes)
+    else:
+        salida.append("Sin advertencias.")
+
+    # 4. RESULTADO FINAL
+    if errores_lexicos or errores_sintacticos:
+        salida.append("\nANÁLISIS FINALIZADO CON ERRORES.")
+
+    elif advertencias:
+        salida.append("\nANÁLISIS FINALIZADO CON ADVERTENCIAS.")
+
+    else:
+        salida.append("\nANÁLISIS FINALIZADO CORRECTAMENTE.")
+
+    return "\n".join(salida)
 
 
 if __name__ == "__main__":

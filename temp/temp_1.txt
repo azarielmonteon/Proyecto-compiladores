@@ -1,1 +1,11 @@
-aef
+#include <stdio.h>
+
+int main() {
+
+    int numero = 10;
+    int resultado = numero + 5;
+
+    printf(resultado);
+
+    return 0;
+}

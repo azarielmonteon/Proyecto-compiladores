@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox
 import os
 import shutil
 from automataenc import analizar_codigo
+
 #from sintactico2 import 
 import re 
 

@@ -1,4 +1,0 @@
-int x
-double x
-char wey
-constant great

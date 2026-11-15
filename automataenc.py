@@ -5,7 +5,8 @@ TIPOS_DATOS = {
     "double": "entero largo",
     "str": "cadena",
     "bool": "booleano",
-    "char": "caracter"
+    "char": "caracter",
+    "float": "flotante"
 }
 
 # CARACTERES QUE PUEDE RECONOCER EL AUTÓMATA

@@ -1,0 +1,9 @@
+main(){
+    int x=5;
+    char x=0;
+    bool 2q=0;
+    y=0;
+    Int z=4;
+    x=x+z;
+    print(x)
+}

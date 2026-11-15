@@ -1,0 +1,694 @@
+from pathlib import Path
+import sys
+
+
+class Archivo:
+
+    def leer_archivo(self, ruta):
+        return Path(ruta).read_text(encoding="utf-8")
+
+    def escribir_archivo(self, ruta, texto):
+        ruta = Path(ruta)
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        ruta.write_text(texto, encoding="utf-8")
+
+class Token:
+    def __init__(self, tipo, valor, linea, columna):
+        self.tipo = tipo
+        self.valor = valor
+        self.linea = linea
+        self.columna = columna
+
+
+
+class AnalizadorLexico:
+
+    TIPOS_DATO = {"int", "double", "str", "string", "char", "bool"}
+    OPERADORES = ["+", "-", "*", "/", "="]
+    DELIMITADORES = ["(", ")", "{", "}", ";", ","]
+
+    def analizar(self, codigo):
+
+        tokens = []
+        errores = []
+
+        i = 0
+        linea = 1
+        columna = 1
+
+        def avanzar(cantidad=1):
+            nonlocal i, linea, columna
+
+            texto = codigo[i:i + cantidad]
+
+            for caracter in texto:
+                if caracter == "\n":
+                    linea += 1
+                    columna = 1
+                else:
+                    columna += 1
+
+            i += cantidad
+
+        def es_identificador(caracter):
+            return caracter.isalnum() or caracter == "_"
+
+        while i < len(codigo):
+
+            inicio_linea = linea
+            inicio_columna = columna
+            caracter = codigo[i]
+
+            # ESPACIOS, TABULACIONES Y SALTOS DE LINEA
+            if caracter.isspace():
+                avanzar()
+                continue
+
+            # COMENTARIOS
+            if caracter == "/" and i + 1 < len(codigo):
+
+                siguiente = codigo[i + 1]
+
+                # Comentario de una linea //
+                if siguiente == "/":
+                    while i < len(codigo) and codigo[i] != "\n":
+                        avanzar()
+                    continue
+
+                # Comentario de varias lineas /*
+                elif siguiente == "*":
+                    inicio = i
+                    fin = codigo.find("*/", i + 2)
+
+                    if fin == -1:
+                        errores.append(
+                            f"Error léxico línea {linea}: "
+                            "comentario /* sin cerrar."
+                        )
+                        avanzar(len(codigo) - i)
+                        continue
+
+                    avanzar(fin + 2 - inicio)
+                    continue
+
+            # BIBLIOTECAS #include <...>
+            if caracter == "#":
+
+                j = i + 1
+
+                while j < len(codigo) and codigo[j].isspace():
+                    j += 1
+
+                if codigo.startswith("include", j):
+                    j += 7
+
+                    while j < len(codigo) and codigo[j].isspace():
+                        j += 1
+
+                    if j < len(codigo) and codigo[j] == "<":
+                        fin = codigo.find(">", j + 1)
+                        salto = codigo.find("\n", j + 1)
+
+                        if (fin != -1 and
+                                (salto == -1 or fin < salto) and
+                                fin > j + 1):
+
+                            valor = codigo[i:fin + 1]
+
+                            tokens.append(Token(
+                                "BIBLIOTECA", valor,
+                                inicio_linea, inicio_columna
+                            ))
+
+                            avanzar(fin + 1 - i)
+                            continue
+
+                # Si no es una biblioteca valida
+                tokens.append(Token(
+                    "DESCONOCIDO", caracter,
+                    inicio_linea, inicio_columna
+                ))
+
+                errores.append(
+                    f"Error léxico línea {linea}, columna {columna}: "
+                    f"carácter no reconocido {caracter!r}."
+                )
+
+                avanzar()
+                continue
+
+            # CADENAS ENTRE COMILLAS DOBLES
+            if caracter == '"':
+                j = i + 1
+
+                while j < len(codigo):
+                    if codigo[j] == "\\":
+                        j += 2
+                    elif codigo[j] == '"':
+                        break
+                    else:
+                        j += 1
+
+                if j < len(codigo) and codigo[j] == '"':
+                    valor = codigo[i:j + 1]
+
+                    tokens.append(Token(
+                        "CADENA", valor,
+                        inicio_linea, inicio_columna
+                    ))
+
+                    avanzar(j + 1 - i)
+
+                else:
+                    tokens.append(Token(
+                        "DESCONOCIDO", caracter,
+                        inicio_linea, inicio_columna
+                    ))
+
+                    errores.append(
+                        f"Error léxico línea {linea}, columna {columna}: "
+                        "cadena sin cerrar."
+                    )
+
+                    avanzar()
+
+                continue
+
+            # CARACTERES ENTRE COMILLAS SIMPLES
+            if caracter == "'":
+                j = i + 1
+
+                while j < len(codigo):
+                    if codigo[j] == "\\":
+                        j += 2
+                    elif codigo[j] == "'":
+                        break
+                    else:
+                        j += 1
+
+                if j < len(codigo) and codigo[j] == "'":
+                    valor = codigo[i:j + 1]
+
+                    tokens.append(Token(
+                        "CARACTER", valor,
+                        inicio_linea, inicio_columna
+                    ))
+
+                    avanzar(j + 1 - i)
+
+                else:
+                    tokens.append(Token(
+                        "DESCONOCIDO", caracter,
+                        inicio_linea, inicio_columna
+                    ))
+
+                    errores.append(
+                        f"Error léxico línea {linea}, columna {columna}: "
+                        "carácter sin cerrar."
+                    )
+
+                    avanzar()
+
+                continue
+
+            # NUMEROS E IDENTIFICADORES INVALIDOS
+            if caracter.isdigit():
+
+                j = i
+
+                while j < len(codigo) and codigo[j].isdigit():
+                    j += 1
+
+                # Identificador que comienza con numero
+                if j < len(codigo) and (
+                    codigo[j].isalpha() or codigo[j] == "_"
+                ):
+
+                    while j < len(codigo) and es_identificador(codigo[j]):
+                        j += 1
+
+                    valor = codigo[i:j]
+
+                    tokens.append(Token(
+                        "ID_INVALIDO", valor,
+                        inicio_linea, inicio_columna
+                    ))
+
+                    errores.append(
+                        f"Error léxico línea {linea}: "
+                        f"identificador inválido {valor!r}; "
+                        "no puede comenzar con un número."
+                    )
+
+                    avanzar(j - i)
+                    continue
+
+                # Numero decimal
+                if (j + 1 < len(codigo) and
+                        codigo[j] == "." and
+                        codigo[j + 1].isdigit()):
+
+                    j += 1
+
+                    while j < len(codigo) and codigo[j].isdigit():
+                        j += 1
+
+                valor = codigo[i:j]
+
+                tokens.append(Token(
+                    "NUMERO", valor,
+                    inicio_linea, inicio_columna
+                ))
+
+                avanzar(j - i)
+                continue
+
+            # IDENTIFICADORES
+            if caracter.isalpha() or caracter == "_":
+
+                j = i + 1
+
+                while j < len(codigo) and es_identificador(codigo[j]):
+                    j += 1
+
+                valor = codigo[i:j]
+
+                tokens.append(Token(
+                    "ID", valor,
+                    inicio_linea, inicio_columna
+                ))
+
+                avanzar(j - i)
+                continue
+
+            # OPERADORES
+            if caracter in self.OPERADORES:
+
+                tokens.append(Token(
+                    "OPERADOR", caracter,
+                    inicio_linea, inicio_columna
+                ))
+
+                avanzar()
+                continue
+
+            # DELIMITADORES
+            if caracter in self.DELIMITADORES:
+
+                tokens.append(Token(
+                    "DELIMITADOR", caracter,
+                    inicio_linea, inicio_columna
+                ))
+
+                avanzar()
+                continue
+
+            # CARACTERES DESCONOCIDOS
+            tokens.append(Token(
+                "DESCONOCIDO", caracter,
+                inicio_linea, inicio_columna
+            ))
+
+            errores.append(
+                f"Error léxico línea {linea}, columna {columna}: "
+                f"carácter no reconocido {caracter!r}."
+            )
+
+            avanzar()
+
+        # FIN DEL ARCHIVO
+        tokens.append(Token("EOF", "", linea, columna))
+
+        return tokens, errores
+
+
+class AnalizadorSintactico:
+    TIPOS = {"int", "double", "str", "string", "char", "bool"}
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.i = 0
+        self.advertencias = []
+        self.errores = []
+        self.tabla = {}
+
+    def actual(self):
+        return self.tokens[self.i]
+
+    def avanzar(self):
+        t = self.actual()
+        if t.tipo != "EOF":
+            self.i += 1
+        return t
+
+    def aceptar(self, tipo=None, valor=None):
+        t = self.actual()
+        if tipo is not None and t.tipo != tipo:
+            return None
+        if valor is not None and t.valor != valor:
+            return None
+        return self.avanzar()
+
+    def esperar(self, tipo, valor, descripcion):
+        if self.aceptar(tipo, valor):
+            return True
+        t = self.actual()
+        self.errores.append(
+            f"Error sintáctico línea {t.linea}: se esperaba {descripcion}; "
+            f"se encontró {t.valor!r}."
+        )
+        return False
+
+    def analizar(self):
+        while self.actual().tipo == "BIBLIOTECA":
+            self.avanzar()
+
+        if self.actual().valor != "main":
+            self.errores.append("Error sintáctico: no se encontró main().")
+            return self.advertencias, self.errores, self.tabla
+
+        self.avanzar()
+        self.esperar("DELIMITADOR", "(", "'(' después de main")
+        self.esperar("DELIMITADOR", ")", "')' después de main")
+        self.bloque()
+
+        while self.actual().tipo != "EOF":
+            t = self.avanzar()
+            self.advertencias.append(
+                f"Advertencia línea {t.linea}: contenido fuera de main: {t.valor!r}."
+            )
+        return self.advertencias, self.errores, self.tabla
+
+    def bloque(self):
+        apertura = self.aceptar("DELIMITADOR", "{")
+        if not apertura:
+            t = self.actual()
+            self.errores.append(f"Error sintáctico línea {t.linea}: se esperaba '{{'.")
+            return
+
+        while self.actual().tipo != "EOF" and self.actual().valor != "}":
+            antes = self.i
+            t = self.actual()
+
+            if t.tipo == "BIBLIOTECA":
+                self.advertencias.append(
+                    f"Advertencia línea {t.linea}: declare bibliotecas antes de main."
+                )
+                self.avanzar()
+            elif t.tipo == "ID" and t.valor in self.TIPOS:
+                self.declaracion()
+            elif t.tipo == "ID" and t.valor in {"print", "printf"}:
+                self.impresion()
+            elif t.tipo == "ID":
+                self.asignacion()
+            elif t.valor == "{":
+                self.bloque()
+            else:
+                self.avanzar()
+                self.errores.append(
+                    f"Error sintáctico línea {t.linea}: token inesperado {t.valor!r}."
+                )
+
+            if self.i == antes:
+                self.avanzar()
+
+        if not self.aceptar("DELIMITADOR", "}"):
+            self.errores.append(
+                f"Error sintáctico: falta '}}' para cerrar el bloque de línea "
+                f"{apertura.linea}."
+            )
+
+    def declaracion(self):
+        tipo = self.avanzar()
+        nombre = self.actual()
+
+        if nombre.tipo == "ID_INVALIDO":
+            self.avanzar()
+            self.errores.append(
+                f"Error léxico/sintáctico línea {nombre.linea}: "
+                f"nombre de variable inválido {nombre.valor!r}."
+            )
+            self.recuperar()
+            return
+
+        if nombre.tipo != "ID":
+            self.errores.append(
+                f"Error sintáctico línea {nombre.linea}: se esperaba un identificador "
+                "después del tipo de dato."
+            )
+            self.recuperar()
+            return
+
+        self.avanzar()
+        if nombre.valor in self.tabla:
+            previo = self.tabla[nombre.valor]
+            if previo["tipo"] != tipo.valor:
+                self.advertencias.append(
+                    f"Warning ambiguity línea {nombre.linea}: la variable "
+                    f"{nombre.valor!r} ya fue declarada como {previo['tipo']!r} "
+                    f"en línea {previo['linea']} y ahora como {tipo.valor!r}."
+                )
+            else:
+                self.advertencias.append(
+                    f"Warning línea {nombre.linea}: variable {nombre.valor!r} "
+                    "declarada más de una vez."
+                )
+        else:
+            self.tabla[nombre.valor] = {"tipo": tipo.valor, "linea": nombre.linea}
+
+        if self.aceptar("OPERADOR", "="):
+            tipo_valor = self.expresion()
+            self.comprobar_tipo(tipo.valor, tipo_valor, nombre.valor, tipo.linea)
+        self.punto_coma("declaración")
+
+    def asignacion(self):
+        nombre = self.avanzar()
+        if not self.aceptar("OPERADOR", "="):
+            self.errores.append(
+                f"Error sintáctico línea {nombre.linea}: se esperaba '=' después "
+                f"de {nombre.valor!r}."
+            )
+            self.recuperar()
+            return
+
+        tipo_valor = self.expresion()
+        if nombre.valor not in self.tabla:
+            self.advertencias.append(
+                f"Warning undefined variable línea {nombre.linea}: "
+                f"la variable {nombre.valor!r} no ha sido declarada."
+            )
+        else:
+            self.comprobar_tipo(
+                self.tabla[nombre.valor]["tipo"], tipo_valor,
+                nombre.valor, nombre.linea
+            )
+        self.punto_coma("asignación")
+
+    def impresion(self):
+        funcion = self.avanzar()
+        self.esperar("DELIMITADOR", "(", "'(' después de print")
+        if self.actual().valor != ")":
+            self.expresion()
+        self.esperar("DELIMITADOR", ")", "')' para cerrar print")
+        self.punto_coma(funcion.valor)
+
+    def expresion(self, minimo=0):
+        tipo_izq = self.primario()
+        prioridad = {"+": 1, "-": 1, "*": 2, "/": 2}
+
+        while self.actual().tipo == "OPERADOR":
+            op = self.actual().valor
+            p = prioridad.get(op, -1)
+            if p < minimo:
+                break
+            self.avanzar()
+            tipo_der = self.expresion(p + 1)
+            if "double" in {tipo_izq, tipo_der}:
+                tipo_izq = "double"
+            elif tipo_izq is None:
+                tipo_izq = tipo_der
+        return tipo_izq
+
+    def primario(self):
+        t = self.actual()
+        if t.tipo == "NUMERO":
+            self.avanzar()
+            return "double" if "." in t.valor else "int"
+        if t.tipo == "CADENA":
+            self.avanzar()
+            return "str"
+        if t.tipo == "CARACTER":
+            self.avanzar()
+            return "char"
+        if t.valor in {"true", "false"}:
+            self.avanzar()
+            return "bool"
+        if t.tipo == "ID":
+            self.avanzar()
+            if t.valor in self.tabla:
+                return self.tabla[t.valor]["tipo"]
+            self.advertencias.append(
+                f"Warning undefined variable línea {t.linea}: "
+                f"{t.valor!r} se utiliza sin declaración."
+            )
+            return None
+        if self.aceptar("DELIMITADOR", "("):
+            tipo = self.expresion()
+            self.esperar("DELIMITADOR", ")", "')' para cerrar expresión")
+            return tipo
+
+        self.errores.append(
+            f"Error sintáctico línea {t.linea}: se esperaba constante, "
+            f"variable o expresión; se encontró {t.valor!r}."
+        )
+        if t.tipo != "EOF" and t.valor not in {";", ")", "}"}:
+            self.avanzar()
+        return None
+
+    def comprobar_tipo(self, declarado, recibido, nombre, linea):
+        if recibido is None:
+            return
+        compatibles = {
+            "int": {"int"},
+            "double": {"int", "double"},
+            "str": {"str", "string"},
+            "string": {"str", "string"},
+            "char": {"char"},
+            "bool": {"bool", "int"},
+        }
+        if recibido not in compatibles.get(declarado, {declarado}):
+            self.advertencias.append(
+                f"Warning type mismatch línea {linea}: valor de tipo {recibido!r} "
+                f"asignado a {nombre!r}, declarado como {declarado!r}."
+            )
+
+    def punto_coma(self, instruccion):
+        if not self.aceptar("DELIMITADOR", ";"):
+            t = self.actual()
+            self.advertencias.append(
+                f"Warning end instruction línea {t.linea}: falta ';' "
+                f"al final de {instruccion}."
+            )
+
+    def recuperar(self):
+        while self.actual().tipo != "EOF" and self.actual().valor not in {";", "}"}:
+            self.avanzar()
+        self.aceptar("DELIMITADOR", ";")
+
+
+""" este ejecuta ensenando todo el analisis, el otro solo el warning
+def ejecutar(ruta_entrada, ruta_salida=None):
+    ruta_entrada = Path(ruta_entrada)
+    ruta_salida = Path(ruta_salida) if ruta_salida else (
+        ruta_entrada.parent / "resultado_analisis.txt"
+    )
+
+    archivo = Archivo()
+    codigo = archivo.leer_archivo(ruta_entrada)
+
+    tokens, errores_lexicos = AnalizadorLexico().analizar(codigo)
+    sintactico = AnalizadorSintactico(tokens)
+
+    advertencias, errores_sintacticos, tabla = sintactico.analizar()
+
+    salida = [
+        "ANÁLISIS LÉXICO Y SINTÁCTICO",
+        "\n1. TOKENS IDENTIFICADOS",
+    ]
+
+    salida.extend(f"{t.tipo:<18} {t.valor!r:<20} línea {t.linea}, columna {t.columna}"
+        for t in tokens if t.tipo != "EOF"
+    )
+
+    salida += ["\n2. TABLA DE SÍMBOLOS", ]
+
+    if tabla:
+        for nombre, info in tabla.items():
+            salida.append(
+                f"{nombre:<15} tipo={info['tipo']:<10} línea={info['linea']}"
+            )
+    else:
+        salida.append("No se registraron variables.")
+
+    salida += ["\n3. ADVERTENCIAS", "-"]
+
+    todas_advertencias = advertencias + errores_lexicos + errores_sintacticos
+
+    if todas_advertencias:
+        salida.extend(todas_advertencias)
+    else:
+        salida.append("Sin advertencias.")
+
+
+    if errores_lexicos or errores_sintacticos:
+        salida.append("ANÁLISIS FINALIZADO CON ERRORES.")
+    elif advertencias:
+        salida.append("ANÁLISIS FINALIZADO CON ADVERTENCIAS.")
+    else:
+        salida.append("ANÁLISIS FINALIZADO CORRECTAMENTE.")
+
+
+    reporte = "\n".join(salida)
+
+    print(reporte)
+
+    archivo.escribir_archivo(ruta_salida, reporte)
+
+
+    return reporte
+"""
+#"""
+def ejecutar(ruta_entrada, ruta_salida=None):
+    ruta_entrada = Path(ruta_entrada)
+    ruta_salida = Path(ruta_salida) if ruta_salida else (
+        ruta_entrada.parent / "resultado_analisis.txt"
+    )
+
+    archivo = Archivo()
+    codigo = archivo.leer_archivo(ruta_entrada)
+
+    tokens, errores_lexicos = AnalizadorLexico().analizar(codigo)
+    sintactico = AnalizadorSintactico(tokens)
+
+    advertencias, errores_sintacticos, tabla = sintactico.analizar()
+
+    salida = [
+        "ANÁLISIS LÉXICO Y SINTÁCTICO",
+        "\nADVERTENCIAS",
+    ]
+
+    if advertencias:
+        salida.extend(advertencias)
+    else:
+        salida.append("Sin advertencias.")
+
+
+    if errores_lexicos or errores_sintacticos:
+        salida.append("ANÁLISIS FINALIZADO CON ERRORES.")
+    elif advertencias:
+        salida.append("ANÁLISIS FINALIZADO CON ADVERTENCIAS.")
+    else:
+        salida.append("ANÁLISIS FINALIZADO CORRECTAMENTE.")
+
+
+    reporte = "\n".join(salida)
+
+    print(reporte)
+
+    archivo.escribir_archivo(ruta_salida, reporte)
+
+    return reporte
+#"""
+
+if __name__ == "__main__":
+    entrada = Path(sys.argv[1]) if len(sys.argv) > 1 else (
+        Path(__file__).with_name("prueba.txt")
+    )
+    try:
+        ejecutar(entrada)
+    except (FileNotFoundError, OSError) as e:
+        print(f"Error de archivo: {e}")
+        print(
+            "Coloca prueba.txt junto al programa o ejecuta: "
+            "python analizador_lexico_sintactico.py ruta\\archivo.txt"
+        )

@@ -1,9 +1,7 @@
 ANÁLISIS LÉXICO Y SINTÁCTICO
 
-ADVERTENCIAS
-Warning ambiguity línea 3: la variable 'x' ya fue declarada como 'int' en línea 2 y ahora como 'char'.
-Warning type mismatch línea 3: valor de tipo 'int' asignado a 'x', declarado como 'char'.
-Warning undefined variable línea 5: la variable 'y' no ha sido declarada.
-Warning undefined variable línea 7: 'z' se utiliza sin declaración.
-Warning end instruction línea 9: falta ';' al final de print.
+ADVERTENCIAS Y ERRORES
+-
+Error semántico línea 8: valor de tipo 'str' asignado a 'edad', declarado como 'int'.
+Error semántico línea 12: valor de tipo 'str' asignado a 'edad', declarado como 'int'.
 ANÁLISIS FINALIZADO CON ERRORES.

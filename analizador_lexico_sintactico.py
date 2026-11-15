@@ -22,10 +22,54 @@ class Token:
 
 
 class AnalizadorLexico:
+    # Tipos básicos que utilizaremos en nuestro subconjunto de C
+    TIPOS_DATO = {
+        "void",
+        "char",
+        "short",
+        "int",
+        "long",
+        "float",
+        "double",
+        "_Bool"
+    }
 
-    TIPOS_DATO = {"int", "double", "str", "string", "char", "bool"}
-    OPERADORES = ["+", "-", "*", "/", "="]
-    DELIMITADORES = ["(", ")", "{", "}", ";", ","]
+    # Palabras reservadas de C que iremos incorporando al parser
+    PALABRAS_RESERVADAS = {
+        "if", "else",
+        "while", "do", "for",
+        "switch", "case", "default",
+        "break", "continue",
+        "return",
+        "sizeof",
+        "const", "static",
+        "struct", "typedef",
+        "enum", "union",
+        "extern", "register",
+        "signed", "unsigned",
+        "volatile", "auto"
+    }
+
+    # Ordenados para reconocer primero los operadores más largos
+    OPERADORES = (
+        ">>=", "<<=",
+        "++", "--",
+        "+=", "-=", "*=", "/=", "%=",
+        "==", "!=", "<=", ">=",
+        "&&", "||",
+        "<<", ">>",
+        "&=", "|=", "^=",
+        "+", "-", "*", "/", "%",
+        "=", "<", ">", "!",
+        "&", "|", "^", "~",
+        "?", ":", "."
+    )
+
+    DELIMITADORES = {
+        "(", ")", "{", "}",
+        "[", "]", ";", ","
+    }
+
 
     def analizar(self, codigo):
 
@@ -264,6 +308,7 @@ class AnalizadorLexico:
                 continue
 
             # IDENTIFICADORES
+
             if caracter.isalpha() or caracter == "_":
 
                 j = i + 1
@@ -273,24 +318,43 @@ class AnalizadorLexico:
 
                 valor = codigo[i:j]
 
+                if valor in self.TIPOS_DATO:
+                    tipo_token = "TIPO_DATO"
+
+                elif valor in self.PALABRAS_RESERVADAS:
+                    tipo_token = "PALABRA_RESERVADA"
+
+                else:
+                    tipo_token = "ID"
+
                 tokens.append(Token(
-                    "ID", valor,
+                    tipo_token, valor,
                     inicio_linea, inicio_columna
                 ))
 
                 avanzar(j - i)
                 continue
 
-            # OPERADORES
-            if caracter in self.OPERADORES:
 
+            # OPERADORES: reconocer primero los más largos
+            operador_encontrado = None
+
+            for operador in self.OPERADORES:
+                if codigo.startswith(operador, i):
+                    operador_encontrado = operador
+                    break
+
+            if operador_encontrado is not None:
                 tokens.append(Token(
-                    "OPERADOR", caracter,
-                    inicio_linea, inicio_columna
+                    "OPERADOR",
+                    operador_encontrado,
+                    inicio_linea,
+                    inicio_columna
                 ))
 
-                avanzar()
+                avanzar(len(operador_encontrado))
                 continue
+
 
             # DELIMITADORES
             if caracter in self.DELIMITADORES:
@@ -325,12 +389,32 @@ class AnalizadorLexico:
 class AnalizadorSintactico:
     TIPOS = {"int", "double", "str", "string", "char", "bool"}
 
+    
     def __init__(self, tokens):
         self.tokens = tokens
         self.i = 0
         self.advertencias = []
         self.errores = []
-        self.tabla = {}
+        # Pila de ámbitos: el primero corresponde al ámbito global
+        self.ambitos = [{}]
+        # Tabla general de símbolos
+        # Conserva todas las declaraciones, incluso nombres repetidos
+        self.tabla = []
+    
+    def entrar_ambito(self):
+        self.ambitos.append({})
+
+    def salir_ambito(self):
+        if len(self.ambitos) > 1:
+            self.ambitos.pop()
+
+    def buscar_variable(self, nombre):
+        # Buscar desde el ámbito más interno hacia el exterior
+        for ambito in reversed(self.ambitos):
+            if nombre in ambito:
+                return ambito[nombre]
+
+        return None
 
     def actual(self):
         return self.tokens[self.i]
@@ -386,6 +470,7 @@ class AnalizadorSintactico:
             self.errores.append(f"Error sintáctico línea {t.linea}: se esperaba '{{'.")
             return
 
+        self.entrar_ambito()        
         while self.actual().tipo != "EOF" and self.actual().valor != "}":
             antes = self.i
             t = self.actual()
@@ -395,10 +480,14 @@ class AnalizadorSintactico:
                     f"Advertencia línea {t.linea}: declare bibliotecas antes de main."
                 )
                 self.avanzar()
-            elif t.tipo == "ID" and t.valor in self.TIPOS:
+            elif t.tipo == "TIPO_DATO":
                 self.declaracion()
             elif t.tipo == "ID" and t.valor in {"print", "printf"}:
                 self.impresion()
+            elif t.tipo == "PALABRA_RESERVADA" and t.valor == "if":
+                self.condicional()
+            elif t.tipo == "PALABRA_RESERVADA" and t.valor == "return":
+                self.retorno()
             elif t.tipo == "ID":
                 self.asignacion()
             elif t.valor == "{":
@@ -417,6 +506,53 @@ class AnalizadorSintactico:
                 f"Error sintáctico: falta '}}' para cerrar el bloque de línea "
                 f"{apertura.linea}."
             )
+        self.salir_ambito()
+
+        
+    def condicional(self):
+        # Consumir la palabra reservada if
+        self.avanzar()
+
+        # Comprobar apertura de paréntesis
+        if not self.esperar("DELIMITADOR", "(", "'(' después de if"):
+            return
+
+        # Por ahora solamente avanzamos por la condición.
+        # En el siguiente paso implementaremos su análisis.
+        profundidad = 0
+
+        while self.actual().tipo != "EOF":
+
+            t = self.actual()
+
+            if t.valor == "(":
+                profundidad += 1
+
+            elif t.valor == ")":
+                if profundidad == 0:
+                    break
+                profundidad -= 1
+
+            self.avanzar()
+
+        # Comprobar cierre de paréntesis
+        if not self.esperar("DELIMITADOR", ")", "')' después de la condición"):
+            return
+
+        # Analizar el bloque del if
+        self.bloque()
+
+    
+    def retorno(self):
+        # Consumir la palabra reservada return
+        self.avanzar()
+
+        # Si no hay un punto y coma, analizar el valor de retorno
+        if self.actual().valor != ";":
+            self.expresion()
+
+        self.punto_coma("return")
+
 
     def declaracion(self):
         tipo = self.avanzar()
@@ -440,48 +576,73 @@ class AnalizadorSintactico:
             return
 
         self.avanzar()
-        if nombre.valor in self.tabla:
-            previo = self.tabla[nombre.valor]
-            if previo["tipo"] != tipo.valor:
-                self.advertencias.append(
-                    f"Warning ambiguity línea {nombre.linea}: la variable "
-                    f"{nombre.valor!r} ya fue declarada como {previo['tipo']!r} "
-                    f"en línea {previo['linea']} y ahora como {tipo.valor!r}."
-                )
-            else:
-                self.advertencias.append(
-                    f"Warning línea {nombre.linea}: variable {nombre.valor!r} "
-                    "declarada más de una vez."
-                )
-        else:
-            self.tabla[nombre.valor] = {"tipo": tipo.valor, "linea": nombre.linea}
 
+        ambito_actual = self.ambitos[-1]
+        if nombre.valor in ambito_actual:
+            previo = ambito_actual[nombre.valor]
+
+            self.advertencias.append(
+                f"Warning línea {nombre.linea}: variable "
+                f"{nombre.valor!r} declarada más de una vez "
+                f"en el mismo ámbito (línea {previo['linea']})."
+            )
+
+        else:
+            informacion = {
+                "nombre": nombre.valor,
+                "tipo": tipo.valor,
+                "linea": nombre.linea,
+                "ambito": len(self.ambitos) - 1
+            }
+            ambito_actual[nombre.valor] = informacion
+            # Registrar todas las declaraciones
+            self.tabla.append(informacion)
+            
         if self.aceptar("OPERADOR", "="):
             tipo_valor = self.expresion()
             self.comprobar_tipo(tipo.valor, tipo_valor, nombre.valor, tipo.linea)
         self.punto_coma("declaración")
 
+
     def asignacion(self):
         nombre = self.avanzar()
-        if not self.aceptar("OPERADOR", "="):
+
+        operadores_asignacion = {
+            "=", "+=", "-=", "*=", "/=", "%="
+        }
+
+        operador = self.actual()
+
+        if operador.tipo != "OPERADOR" or operador.valor not in operadores_asignacion:
             self.errores.append(
-                f"Error sintáctico línea {nombre.linea}: se esperaba '=' después "
-                f"de {nombre.valor!r}."
+                f"Error sintáctico línea {nombre.linea}: "
+                f"se esperaba un operador de asignación después de {nombre.valor!r}."
             )
             self.recuperar()
             return
 
+        self.avanzar()
+
         tipo_valor = self.expresion()
-        if nombre.valor not in self.tabla:
+
+        
+        variable = self.buscar_variable(nombre.valor)
+
+        if variable is None:
             self.advertencias.append(
                 f"Warning undefined variable línea {nombre.linea}: "
                 f"la variable {nombre.valor!r} no ha sido declarada."
             )
         else:
+            tipo_variable = variable["tipo"]
+
             self.comprobar_tipo(
-                self.tabla[nombre.valor]["tipo"], tipo_valor,
-                nombre.valor, nombre.linea
+                tipo_variable,
+                tipo_valor,
+                nombre.valor,
+                nombre.linea
             )
+
         self.punto_coma("asignación")
 
     def impresion(self):
@@ -525,8 +686,9 @@ class AnalizadorSintactico:
             return "bool"
         if t.tipo == "ID":
             self.avanzar()
-            if t.valor in self.tabla:
-                return self.tabla[t.valor]["tipo"]
+            variable = self.buscar_variable(t.valor)
+            if variable is not None:
+                return variable["tipo"]
             self.advertencias.append(
                 f"Warning undefined variable línea {t.linea}: "
                 f"{t.valor!r} se utiliza sin declaración."
@@ -544,21 +706,24 @@ class AnalizadorSintactico:
         if t.tipo != "EOF" and t.valor not in {";", ")", "}"}:
             self.avanzar()
         return None
-
+    
     def comprobar_tipo(self, declarado, recibido, nombre, linea):
         if recibido is None:
             return
+
         compatibles = {
             "int": {"int"},
             "double": {"int", "double"},
+            "float": {"int", "float"},
             "str": {"str", "string"},
             "string": {"str", "string"},
             "char": {"char"},
             "bool": {"bool", "int"},
         }
+
         if recibido not in compatibles.get(declarado, {declarado}):
-            self.advertencias.append(
-                f"Warning type mismatch línea {linea}: valor de tipo {recibido!r} "
+            self.errores.append(
+                f"Error semántico línea {linea}: valor de tipo {recibido!r} "
                 f"asignado a {nombre!r}, declarado como {declarado!r}."
             )
 
@@ -603,9 +768,12 @@ def ejecutar(ruta_entrada, ruta_salida=None):
     salida += ["\n2. TABLA DE SÍMBOLOS", ]
 
     if tabla:
-        for nombre, info in tabla.items():
+        for info in tabla:
             salida.append(
-                f"{nombre:<15} tipo={info['tipo']:<10} línea={info['linea']}"
+                f"{info['nombre']:<15} "
+                f"tipo={info['tipo']:<10} "
+                f"línea={info['linea']:<5} "
+                f"ámbito={info['ambito']}"
             )
     else:
         salida.append("No se registraron variables.")
@@ -637,6 +805,8 @@ def ejecutar(ruta_entrada, ruta_salida=None):
 
     return reporte
 """
+
+
 #"""
 def ejecutar(ruta_entrada, ruta_salida=None):
     ruta_entrada = Path(ruta_entrada)
@@ -654,22 +824,31 @@ def ejecutar(ruta_entrada, ruta_salida=None):
 
     salida = [
         "ANÁLISIS LÉXICO Y SINTÁCTICO",
-        "\nADVERTENCIAS",
+        "\nADVERTENCIAS Y ERRORES",
+        "-"
     ]
 
-    if advertencias:
-        salida.extend(advertencias)
+    # Reunir todas las advertencias y errores
+    todos_los_mensajes = (
+        advertencias +
+        errores_lexicos +
+        errores_sintacticos
+    )
+
+    if todos_los_mensajes:
+        salida.extend(todos_los_mensajes)
     else:
         salida.append("Sin advertencias.")
 
-
+    # Determinar el resultado del análisis
     if errores_lexicos or errores_sintacticos:
         salida.append("ANÁLISIS FINALIZADO CON ERRORES.")
+
     elif advertencias:
         salida.append("ANÁLISIS FINALIZADO CON ADVERTENCIAS.")
+
     else:
         salida.append("ANÁLISIS FINALIZADO CORRECTAMENTE.")
-
 
     reporte = "\n".join(salida)
 
@@ -679,6 +858,8 @@ def ejecutar(ruta_entrada, ruta_salida=None):
 
     return reporte
 #"""
+
+
 
 if __name__ == "__main__":
     entrada = Path(sys.argv[1]) if len(sys.argv) > 1 else (

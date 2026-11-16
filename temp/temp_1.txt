@@ -1,11 +1,8 @@
-#include <stdio.h>
+(define numero 5)
 
-int main() {
-
-    int numero = 10;
-    int resultado = numero + 5;
-
-    printf(resultado);
-
-    return 0;
-}
+(begin
+    (display "Valor inicial:")
+    (display numero)
+    (set! numero 10)
+    (display "Nuevo valor:")
+    (display numero))

@@ -2,9 +2,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
 import analizador_lexico_sintactico as analizador
-#from sintactico2 import 
 import re 
-
+from interprete import Interprete
 
 # COLORES
 
@@ -50,7 +49,8 @@ PALABRAS_RESERVADAS = {
         "struct", "union", "enum", "typedef",
         "sizeof", "static_assert", "alignof",
         "true", "false"
-    ]
+    ],
+    "imprecion":["print","printf"]
 }
 
 
@@ -402,6 +402,7 @@ def compilar():
 
 
 # EJECUTAR
+
 def ejecutar():
 
     codigo = ide.get("1.0", "end-1c")
@@ -412,26 +413,24 @@ def ejecutar():
         escribir_terminal("No hay código para ejecutar.")
         return
 
-
     try:
 
-        # Primero verificar que el código sea válido
-        resultados = analizar_codigo(codigo)
+        resultados, arbol = analizador.analizar_codigo(
+            codigo,
+            devolver_ast=True
+        )
+
+        limpiar_terminal()
+        escribir_terminal(resultados)
 
         # Revisar si existe algún error
-        codigo_valido = True
-
-        for resultado in resultados:
-
-            if "no identificado" in resultado:
-
-                codigo_valido = False
-                break
-
+        codigo_valido = (
+            "ANÁLISIS FINALIZADO CORRECTAMENTE" in resultados
+        )
 
         if not codigo_valido:
 
-            limpiar_terminal()
+            escribir_terminal("")
             escribir_terminal("        ERROR DE EJECUCIÓN")
             escribir_terminal("")
             escribir_terminal(
@@ -443,6 +442,25 @@ def ejecutar():
             )
 
             return
+
+        # Ejecutar el AST
+        interprete = Interprete()
+
+        resultado = interprete.ejecutar(arbol)
+
+        escribir_terminal("")
+        escribir_terminal("========== RESULTADO ==========")
+
+        if resultado:
+            escribir_terminal(resultado)
+        else:
+            escribir_terminal("Programa ejecutado sin salida.")
+
+    except Exception as e:
+
+        escribir_terminal("")
+        escribir_terminal("ERROR DURANTE LA EJECUCIÓN")
+        escribir_terminal(str(e))
 
 
         # Crear ventana de ejecución
@@ -509,12 +527,11 @@ def ejecutar():
 
         # Mostrar las instrucciones ejecutadas
 
-        for resultado in resultados:
-
-            salida.insert(
-                "end",
-                resultado + "\n"
-            )
+        # Mostrar el resultado del análisis
+        salida.insert(
+            "end",
+            resultados + "\n"
+        )
 
 
         salida.insert(

@@ -21,55 +21,25 @@ class Token:
 
 
 
+
 class AnalizadorLexico:
-    # Tipos básicos que utilizaremos en nuestro subconjunto de C
-    TIPOS_DATO = {
-        "void",
-        "char",
-        "short",
-        "int",
-        "long",
-        "float",
-        "double",
-        "_Bool"
-    }
 
-    # Palabras reservadas de C que iremos incorporando al parser
+    # Palabras reservadas de Scheme
     PALABRAS_RESERVADAS = {
-        "if", "else",
-        "while", "do", "for",
-        "switch", "case", "default",
-        "break", "continue",
-        "return",
-        "sizeof",
-        "const", "static",
-        "struct", "typedef",
-        "enum", "union",
-        "extern", "register",
-        "signed", "unsigned",
-        "volatile", "auto"
+        "if",
+        "define",
+        "set!",
+        "begin",
+        "lambda"
     }
 
-    # Ordenados para reconocer primero los operadores más largos
-    OPERADORES = (
-        ">>=", "<<=",
-        "++", "--",
-        "+=", "-=", "*=", "/=", "%=",
-        "==", "!=", "<=", ">=",
-        "&&", "||",
-        "<<", ">>",
-        "&=", "|=", "^=",
-        "+", "-", "*", "/", "%",
-        "=", "<", ">", "!",
-        "&", "|", "^", "~",
-        "?", ":", "."
-    )
-
-    DELIMITADORES = {
-        "(", ")", "{", "}",
-        "[", "]", ";", ","
+    # Operadores matemáticos y relacionales
+    OPERADORES = {
+        "+", "-", "*", "/",
+        "=", ">", "<", ">=", "<="
     }
 
+    DELIMITADORES = {"(", ")"}
 
     def analizar(self, codigo):
 
@@ -94,123 +64,73 @@ class AnalizadorLexico:
 
             i += cantidad
 
-        def es_identificador(caracter):
-            return caracter.isalnum() or caracter == "_"
-
         while i < len(codigo):
+
+            caracter = codigo[i]
 
             inicio_linea = linea
             inicio_columna = columna
-            caracter = codigo[i]
 
-            # ESPACIOS, TABULACIONES Y SALTOS DE LINEA
+            # ESPACIOS Y SALTOS DE LINEA
             if caracter.isspace():
                 avanzar()
                 continue
 
-            # COMENTARIOS
-            if caracter == "/" and i + 1 < len(codigo):
-
-                siguiente = codigo[i + 1]
-
-                # Comentario de una linea //
-                if siguiente == "/":
-                    while i < len(codigo) and codigo[i] != "\n":
-                        avanzar()
-                    continue
-
-                # Comentario de varias lineas /*
-                elif siguiente == "*":
-                    inicio = i
-                    fin = codigo.find("*/", i + 2)
-
-                    if fin == -1:
-                        errores.append(
-                            f"Error léxico línea {linea}: "
-                            "comentario /* sin cerrar."
-                        )
-                        avanzar(len(codigo) - i)
-                        continue
-
-                    avanzar(fin + 2 - inicio)
-                    continue
-
-            # BIBLIOTECAS #include <...>
-            if caracter == "#":
-
-                j = i + 1
-
-                while j < len(codigo) and codigo[j].isspace():
-                    j += 1
-
-                if codigo.startswith("include", j):
-                    j += 7
-
-                    while j < len(codigo) and codigo[j].isspace():
-                        j += 1
-
-                    if j < len(codigo) and codigo[j] == "<":
-                        fin = codigo.find(">", j + 1)
-                        salto = codigo.find("\n", j + 1)
-
-                        if (fin != -1 and
-                                (salto == -1 or fin < salto) and
-                                fin > j + 1):
-
-                            valor = codigo[i:fin + 1]
-
-                            tokens.append(Token(
-                                "BIBLIOTECA", valor,
-                                inicio_linea, inicio_columna
-                            ))
-
-                            avanzar(fin + 1 - i)
-                            continue
-
-                # Si no es una biblioteca valida
-                tokens.append(Token(
-                    "DESCONOCIDO", caracter,
-                    inicio_linea, inicio_columna
-                ))
-
-                errores.append(
-                    f"Error léxico línea {linea}, columna {columna}: "
-                    f"carácter no reconocido {caracter!r}."
-                )
-
-                avanzar()
+            # COMENTARIOS DE UNA LINEA
+            if caracter == ";":
+                while i < len(codigo) and codigo[i] != "\n":
+                    avanzar()
                 continue
 
-            # CADENAS ENTRE COMILLAS DOBLES
+            # COMENTARIOS DE VARIAS LINEAS
+            if codigo.startswith("#|", i):
+
+                fin = codigo.find("|#", i + 2)
+
+                if fin == -1:
+                    errores.append(
+                        f"Error léxico línea {linea}: "
+                        "comentario sin cerrar."
+                    )
+                    avanzar(len(codigo) - i)
+                    continue
+
+                avanzar(fin + 2 - i)
+                continue
+
+            # CADENAS DE TEXTO
             if caracter == '"':
+
                 j = i + 1
 
                 while j < len(codigo):
+
                     if codigo[j] == "\\":
                         j += 2
+
                     elif codigo[j] == '"':
                         break
+
                     else:
                         j += 1
 
                 if j < len(codigo) and codigo[j] == '"':
+
                     valor = codigo[i:j + 1]
 
                     tokens.append(Token(
-                        "CADENA", valor,
-                        inicio_linea, inicio_columna
+                        "CADENA",
+                        valor,
+                        inicio_linea,
+                        inicio_columna
                     ))
 
                     avanzar(j + 1 - i)
 
                 else:
-                    tokens.append(Token(
-                        "DESCONOCIDO", caracter,
-                        inicio_linea, inicio_columna
-                    ))
 
                     errores.append(
-                        f"Error léxico línea {linea}, columna {columna}: "
+                        f"Error léxico línea {linea}: "
                         "cadena sin cerrar."
                     )
 
@@ -218,133 +138,118 @@ class AnalizadorLexico:
 
                 continue
 
-            # CARACTERES ENTRE COMILLAS SIMPLES
-            if caracter == "'":
-                j = i + 1
+            # VALORES BOOLEANOS
+            if codigo.startswith("#t", i) or codigo.startswith("#f", i):
 
-                while j < len(codigo):
-                    if codigo[j] == "\\":
-                        j += 2
-                    elif codigo[j] == "'":
-                        break
-                    else:
-                        j += 1
+                valor = codigo[i:i + 2]
 
-                if j < len(codigo) and codigo[j] == "'":
-                    valor = codigo[i:j + 1]
+                tokens.append(Token(
+                    "BOOLEANO",
+                    valor,
+                    inicio_linea,
+                    inicio_columna
+                ))
 
-                    tokens.append(Token(
-                        "CARACTER", valor,
-                        inicio_linea, inicio_columna
-                    ))
-
-                    avanzar(j + 1 - i)
-
-                else:
-                    tokens.append(Token(
-                        "DESCONOCIDO", caracter,
-                        inicio_linea, inicio_columna
-                    ))
-
-                    errores.append(
-                        f"Error léxico línea {linea}, columna {columna}: "
-                        "carácter sin cerrar."
-                    )
-
-                    avanzar()
-
+                avanzar(2)
                 continue
 
-            # NUMEROS E IDENTIFICADORES INVALIDOS
-            if caracter.isdigit():
+            # DELIMITADORES
+            if caracter in self.DELIMITADORES:
+
+                tokens.append(Token(
+                    "DELIMITADOR",
+                    caracter,
+                    inicio_linea,
+                    inicio_columna
+                ))
+
+                avanzar()
+                continue
+
+            # NÚMEROS POSITIVOS, NEGATIVOS Y DECIMALES
+            inicio_numero = (
+                caracter.isdigit()
+                or (
+                    caracter in "+-"
+                    and i + 1 < len(codigo)
+                    and codigo[i + 1].isdigit()
+                )
+            )
+
+            if inicio_numero:
 
                 j = i
+
+                if codigo[j] in "+-":
+                    j += 1
 
                 while j < len(codigo) and codigo[j].isdigit():
                     j += 1
 
-                # Identificador que comienza con numero
-                if j < len(codigo) and (
-                    codigo[j].isalpha() or codigo[j] == "_"
+                if (
+                    j + 1 < len(codigo)
+                    and codigo[j] == "."
+                    and codigo[j + 1].isdigit()
                 ):
-
-                    while j < len(codigo) and es_identificador(codigo[j]):
-                        j += 1
-
-                    valor = codigo[i:j]
-
-                    tokens.append(Token(
-                        "ID_INVALIDO", valor,
-                        inicio_linea, inicio_columna
-                    ))
-
-                    errores.append(
-                        f"Error léxico línea {linea}: "
-                        f"identificador inválido {valor!r}; "
-                        "no puede comenzar con un número."
-                    )
-
-                    avanzar(j - i)
-                    continue
-
-                # Numero decimal
-                if (j + 1 < len(codigo) and
-                        codigo[j] == "." and
-                        codigo[j + 1].isdigit()):
 
                     j += 1
 
                     while j < len(codigo) and codigo[j].isdigit():
                         j += 1
 
+                # Comprobar que el número no esté unido a un identificador
+                if (
+                    j < len(codigo)
+                    and (
+                        codigo[j].isalpha()
+                        or codigo[j] in "_?!"
+                    )
+                ):
+
+                    while (
+                        j < len(codigo)
+                        and not codigo[j].isspace()
+                        and codigo[j] not in "()"
+                    ):
+                        j += 1
+
+                    valor = codigo[i:j]
+
+                    errores.append(
+                        f"Error léxico línea {linea}: "
+                        f"número o identificador inválido {valor!r}."
+                    )
+
+                    avanzar(j - i)
+                    continue
+
                 valor = codigo[i:j]
 
                 tokens.append(Token(
-                    "NUMERO", valor,
-                    inicio_linea, inicio_columna
+                    "NUMERO",
+                    valor,
+                    inicio_linea,
+                    inicio_columna
                 ))
 
                 avanzar(j - i)
                 continue
 
-            # IDENTIFICADORES
-
-            if caracter.isalpha() or caracter == "_":
-
-                j = i + 1
-
-                while j < len(codigo) and es_identificador(codigo[j]):
-                    j += 1
-
-                valor = codigo[i:j]
-
-                if valor in self.TIPOS_DATO:
-                    tipo_token = "TIPO_DATO"
-
-                elif valor in self.PALABRAS_RESERVADAS:
-                    tipo_token = "PALABRA_RESERVADA"
-
-                else:
-                    tipo_token = "ID"
-
-                tokens.append(Token(
-                    tipo_token, valor,
-                    inicio_linea, inicio_columna
-                ))
-
-                avanzar(j - i)
-                continue
-
-
-            # OPERADORES: reconocer primero los más largos
+            # OPERADORES
             operador_encontrado = None
 
-            for operador in self.OPERADORES:
+            for operador in sorted(
+                self.OPERADORES,
+                key=len,
+                reverse=True
+            ):
+
                 if codigo.startswith(operador, i):
                     operador_encontrado = operador
                     break
 
             if operador_encontrado is not None:
+
                 tokens.append(Token(
                     "OPERADOR",
                     operador_encontrado,
@@ -355,24 +260,44 @@ class AnalizadorLexico:
                 avanzar(len(operador_encontrado))
                 continue
 
+            # IDENTIFICADORES Y PALABRAS RESERVADAS
+            if (
+                caracter.isalpha()
+                or caracter in "_?!"
+            ):
 
-            # DELIMITADORES
-            if caracter in self.DELIMITADORES:
+                j = i + 1
+
+                while (
+                    j < len(codigo)
+                    and not codigo[j].isspace()
+                    and codigo[j] not in "()"
+                    and codigo[j] != ";"
+                ):
+                    j += 1
+
+                valor = codigo[i:j]
+
+                if valor in self.PALABRAS_RESERVADAS:
+                    tipo_token = "PALABRA_RESERVADA"
+
+                elif valor in self.OPERADORES:
+                    tipo_token = "OPERADOR"
+
+                else:
+                    tipo_token = "ID"
 
                 tokens.append(Token(
-                    "DELIMITADOR", caracter,
-                    inicio_linea, inicio_columna
+                    tipo_token,
+                    valor,
+                    inicio_linea,
+                    inicio_columna
                 ))
 
-                avanzar()
+                avanzar(j - i)
                 continue
 
             # CARACTERES DESCONOCIDOS
-            tokens.append(Token(
-                "DESCONOCIDO", caracter,
-                inicio_linea, inicio_columna
-            ))
-
             errores.append(
                 f"Error léxico línea {linea}, columna {columna}: "
                 f"carácter no reconocido {caracter!r}."
@@ -381,15 +306,21 @@ class AnalizadorLexico:
             avanzar()
 
         # FIN DEL ARCHIVO
-        tokens.append(Token("EOF", "", linea, columna))
+        tokens.append(Token(
+            "EOF",
+            "",
+            linea,
+            columna
+        ))
 
         return tokens, errores
 
 
-class AnalizadorSintactico:
-    TIPOS = {"int", "double", "str", "string", "char", "bool"}
 
-    
+
+
+class AnalizadorSintactico:
+
     def __init__(self, tokens):
         self.tokens = tokens
         self.i = 0
@@ -403,497 +334,372 @@ class AnalizadorSintactico:
         # Tabla de símbolos
         self.tabla = []
 
-        # Árbol sintáctico AST
+        # Árbol sintáctico
         self.arbol = NodoAST("Programa")
-
-    def entrar_ambito(self):
-        self.ambitos.append({})
-
-    def salir_ambito(self):
-        if len(self.ambitos) > 1:
-            self.ambitos.pop()
-
-    def buscar_variable(self, nombre):
-        # Buscar desde el ámbito más interno hacia el exterior
-        for ambito in reversed(self.ambitos):
-            if nombre in ambito:
-                return ambito[nombre]
-
-        return None
 
     def actual(self):
         return self.tokens[self.i]
 
     def avanzar(self):
         t = self.actual()
+
         if t.tipo != "EOF":
             self.i += 1
+
         return t
 
     def aceptar(self, tipo=None, valor=None):
         t = self.actual()
+
         if tipo is not None and t.tipo != tipo:
             return None
+
         if valor is not None and t.valor != valor:
             return None
+
         return self.avanzar()
 
     def esperar(self, tipo, valor, descripcion):
         if self.aceptar(tipo, valor):
             return True
+
         t = self.actual()
+
         self.errores.append(
-            f"Error sintáctico línea {t.linea}: se esperaba {descripcion}; "
+            f"Error sintáctico línea {t.linea}: "
+            f"se esperaba {descripcion}; "
             f"se encontró {t.valor!r}."
         )
+
         return False
 
+    def buscar_variable(self, nombre):
+        for ambito in reversed(self.ambitos):
+            if nombre in ambito:
+                return ambito[nombre]
+
+        return None
+
+    def inferir_tipo(self, nodo):
+        if nodo is None:
+            return None
+
+        if nodo.tipo == "Numero":
+            return "double" if "." in nodo.valor else "int"
+
+        if nodo.tipo == "Cadena":
+            return "str"
+
+        if nodo.tipo == "Booleano":
+            return "bool"
+
+        if nodo.tipo == "Comparacion":
+            return "bool"
+
+        if nodo.tipo == "Variable":
+            variable = self.buscar_variable(nodo.valor)
+            return variable["tipo"] if variable else None
+
+        if nodo.tipo == "Operacion":
+            tipos = [
+                self.inferir_tipo(hijo)
+                for hijo in nodo.hijos
+            ]
+
+            if "double" in tipos:
+                return "double"
+
+            return "int"
+
+        return None
 
     def analizar(self):
 
-        # Buscar la función main
         while self.actual().tipo != "EOF":
-
-            t = self.actual()
-
-            # Ignorar bibliotecas
-            if t.tipo == "BIBLIOTECA":
-                self.avanzar()
-                continue
-
-            # Reconocer el tipo de retorno de main
-            if t.tipo == "TIPO_DATO":
-
-                # Guardar posición actual
-                posicion = self.i
-
-                tipo = self.avanzar()
-
-                # Comprobar si después del tipo viene main
-                if (
-                    self.actual().tipo == "ID"
-                    and self.actual().valor == "main"
-                ):
-                    break
-
-                # No es la declaración de main
-                self.i = posicion
-
-            # Reconocer main
-            if t.tipo == "ID" and t.valor == "main":
-                break
-
-            self.advertencias.append(
-                f"Advertencia línea {t.linea}: "
-                f"contenido fuera de main: {t.valor!r}."
-            )
-
-            self.avanzar()
-
-        # Comprobar que se encontró main
-        if self.actual().tipo == "EOF":
-            self.errores.append(
-                "Error sintáctico: no se encontró main()."
-            )
-
-            return self.advertencias, self.errores, self.tabla
-
-        # Consumir el tipo de retorno si existe
-        if self.actual().tipo == "TIPO_DATO":
-            self.avanzar()
-
-        # Consumir main
-        self.esperar("ID", "main", "main")
-
-        self.esperar(
-            "DELIMITADOR", "(", "'(' después de main"
-        )
-
-        self.esperar(
-            "DELIMITADOR", ")", "')' después de main"
-        )
-
-        # Crear nodo de función
-        nodo_main = NodoAST("Funcion", "main")
-
-        # Analizar cuerpo de main
-        bloque_main = self.bloque()
-
-        nodo_main.agregar_hijo(bloque_main)
-
-        self.arbol.agregar_hijo(nodo_main)
-
-        # Revisar contenido posterior a main
-        while self.actual().tipo != "EOF":
-
-            t = self.avanzar()
-
-            self.advertencias.append(
-                f"Advertencia línea {t.linea}: "
-                f"contenido fuera de main: {t.valor!r}."
-            )
-
-        return self.advertencias, self.errores, self.tabla
-
-
-        # Buscar main en cualquier posición
-        while self.actual().tipo != "EOF":
-
-            t = self.actual()
-
-            if t.valor == "main" and t.tipo == "ID":
-                break
-
-            if t.tipo == "BIBLIOTECA":
-                self.avanzar()
-                continue
-
-            self.advertencias.append(
-                f"Advertencia línea {t.linea}: "
-                f"contenido fuera de main: {t.valor!r}."
-            )
-
-            self.avanzar()
-
-        if self.actual().tipo == "EOF":
-            self.errores.append(
-                "Error sintáctico: no se encontró main()."
-            )
-
-            return self.advertencias, self.errores, self.tabla
-
-        # Reconocer main
-        self.avanzar()
-
-        self.esperar(
-            "DELIMITADOR", "(", "'(' después de main"
-        )
-
-        self.esperar(
-            "DELIMITADOR", ")", "')' después de main"
-        )
-
-        # Crear nodo de función
-        nodo_main = NodoAST("Funcion", "main")
-
-        # Obtener bloque
-        bloque_main = self.bloque()
-
-        nodo_main.agregar_hijo(bloque_main)
-
-        self.arbol.agregar_hijo(nodo_main)
-
-        while self.actual().tipo != "EOF":
-
-            t = self.avanzar()
-
-            self.advertencias.append(
-                f"Advertencia línea {t.linea}: "
-                f"contenido fuera de main: {t.valor!r}."
-            )
-
-        return self.advertencias, self.errores, self.tabla
-  
-    def bloque(self):
-
-        apertura = self.aceptar("DELIMITADOR", "{")
-
-        if not apertura:
-            t = self.actual()
-
-            self.errores.append(
-                f"Error sintáctico línea {t.linea}: "
-                "se esperaba '{'."
-            )
-
-            return None
-
-        nodo_bloque = NodoAST("Bloque")
-
-        self.entrar_ambito()
-
-        while (
-            self.actual().tipo != "EOF"
-            and self.actual().valor != "}"
-        ):
 
             antes = self.i
-            t = self.actual()
 
-            nodo = None
-
-            if t.tipo == "TIPO_DATO":
-                nodo = self.declaracion()
-
-            elif t.tipo == "ID" and t.valor in {"print", "printf"}:
-                nodo = self.impresion()
-
-            elif t.tipo == "PALABRA_RESERVADA" and t.valor == "if":
-                nodo = self.condicional()
-
-            elif t.tipo == "PALABRA_RESERVADA" and t.valor == "return":
-                nodo = self.retorno()
-
-            elif t.tipo == "ID":
-                nodo = self.asignacion()
-
-            elif t.valor == "{":
-                nodo = self.bloque()
-
-            else:
-                self.avanzar()
-
-                self.errores.append(
-                    f"Error sintáctico línea {t.linea}: "
-                    f"token inesperado {t.valor!r}."
-                )
+            nodo = self.expresion()
 
             if nodo is not None:
-                nodo_bloque.agregar_hijo(nodo)
+                self.arbol.agregar_hijo(nodo)
 
             if self.i == antes:
                 self.avanzar()
 
-        if not self.aceptar("DELIMITADOR", "}"):
+        return self.advertencias, self.errores, self.tabla
+
+    def expresion(self):
+
+        t = self.actual()
+
+        # Expresiones entre paréntesis
+        if self.aceptar("DELIMITADOR", "("):
+
+            funcion = self.actual()
+
+            if funcion.tipo == "EOF":
+                self.errores.append(
+                    f"Error sintáctico línea {funcion.linea}: "
+                    "expresión sin cerrar."
+                )
+                return None
+
+            self.avanzar()
+
+            # DEFINICIÓN DE VARIABLES
+            if funcion.valor == "define":
+                return self.definicion(funcion)
+            if funcion.valor == "set!":
+                return self.asignacion(funcion)
+            # CONDICIONAL IF
+            if funcion.valor == "if":
+                return self.condicional(funcion)
+
+            # BLOQUE BEGIN
+            if funcion.valor == "begin":
+                return self.bloque_begin(funcion)
+
+            # IMPRESIÓN DISPLAY
+            if funcion.valor == "display":
+                return self.impresion(funcion)
+
+            # OPERACIONES MATEMÁTICAS Y COMPARACIONES
+            if funcion.valor in {
+                "+", "-", "*", "/", "=", ">", "<", ">=", "<="
+            }:
+                return self.operacion(funcion)
+
             self.errores.append(
-                "Error sintáctico: falta '}' para cerrar el bloque."
+                f"Error sintáctico línea {funcion.linea}: "
+                f"función no reconocida {funcion.valor!r}."
             )
 
-        self.salir_ambito()
+            self.recuperar_parentesis()
+            return None
 
-        return nodo_bloque
+        # NÚMEROS
+        if t.tipo == "NUMERO":
+            self.avanzar()
+            return NodoAST("Numero", t.valor)
 
-   
-    def condicional(self):
-        # Consumir la palabra reservada if
+        # CADENAS
+        if t.tipo == "CADENA":
+            self.avanzar()
+            return NodoAST("Cadena", t.valor)
+
+        # BOOLEANOS
+        if t.tipo == "BOOLEANO":
+            self.avanzar()
+
+            valor = "true" if t.valor == "#t" else "false"
+
+            return NodoAST("Booleano", valor)
+
+        # VARIABLES
+        if t.tipo == "ID":
+            self.avanzar()
+
+            if self.buscar_variable(t.valor) is None:
+                self.advertencias.append(
+                    f"Advertencia línea {t.linea}: "
+                    f"variable {t.valor!r} no declarada."
+                )
+
+            return NodoAST("Variable", t.valor)
+
+        self.errores.append(
+            f"Error sintáctico línea {t.linea}: "
+            f"expresión inesperada {t.valor!r}."
+        )
+
+        if t.tipo != "EOF":
+            self.avanzar()
+
+        return None
+
+    def definicion(self, token):
+
+        nombre = self.actual()
+
+        if nombre.tipo != "ID":
+            self.errores.append(
+                f"Error sintáctico línea {nombre.linea}: "
+                "se esperaba un nombre de variable después de define."
+            )
+
+            self.recuperar_parentesis()
+            return None
+
         self.avanzar()
 
-        # Comprobar apertura de paréntesis
-        if not self.esperar("DELIMITADOR", "(", "'(' después de if"):
-            return
+        expresion = self.expresion()
 
-        # Por ahora solamente avanzamos por la condición.
-        # En el siguiente paso implementaremos su análisis.
-        profundidad = 0
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar define"
+        ):
+            return None
+
+        tipo = self.inferir_tipo(expresion)
+
+        ambito_actual = self.ambitos[-1]
+
+        if nombre.valor in ambito_actual:
+            self.advertencias.append(
+                f"Advertencia línea {nombre.linea}: "
+                f"la variable {nombre.valor!r} ya fue definida."
+            )
+        else:
+            informacion = {
+                "nombre": nombre.valor,
+                "tipo": tipo or "desconocido",
+                "linea": nombre.linea,
+                "ambito": len(self.ambitos) - 1
+            }
+
+            ambito_actual[nombre.valor] = informacion
+            self.tabla.append(informacion)
+
+        nodo = NodoAST("Declaracion", nombre.valor)
+
+        nodo.agregar_hijo(
+            NodoAST("Tipo", tipo or "desconocido")
+        )
+
+        nodo.agregar_hijo(expresion)
+
+        return nodo
+
+
+    def asignacion(self, token):
+        nombre = self.actual()
+
+        if nombre.tipo != "ID":
+            self.errores.append(
+                f"Error sintáctico línea {nombre.linea}: "
+                "se esperaba una variable después de set!."
+            )
+            self.recuperar_parentesis()
+            return None
+
+        self.avanzar()
+
+        expresion = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar set!"
+        ):
+            return None
+
+        if self.buscar_variable(nombre.valor) is None:
+            self.errores.append(
+                f"Error semántico línea {nombre.linea}: "
+                f"la variable {nombre.valor!r} no está definida."
+            )
+            return None
+
+        nodo = NodoAST("Asignacion", nombre.valor)
+        nodo.agregar_hijo(expresion)
+
+        return nodo
+
+    def condicional(self, token):
+
+        condicion = self.expresion()
+        verdadero = self.expresion()
+        falso = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar if"
+        ):
+            return None
+
+        nodo = NodoAST("Condicional", "if")
+
+        nodo.agregar_hijo(condicion)
+        nodo.agregar_hijo(verdadero)
+        nodo.agregar_hijo(falso)
+
+        return nodo
+
+    def bloque_begin(self, token):
+
+        nodo = NodoAST("Bloque", "begin")
+
+        while (
+            self.actual().tipo != "EOF"
+            and self.actual().valor != ")"
+        ):
+
+            antes = self.i
+            expresion = self.expresion()
+
+            if expresion is not None:
+                nodo.agregar_hijo(expresion)
+
+            if self.i == antes:
+                self.avanzar()
+
+        self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar begin"
+        )
+
+        return nodo
+
+    def impresion(self, token):
+
+        expresion = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar display"
+        ):
+            return None
+
+        nodo = NodoAST("Impresion", "display")
+        nodo.agregar_hijo(expresion)
+
+        return nodo
+
+    def operacion(self, token):
+
+        operador = token.valor
+
+        izquierdo = self.expresion()
+        derecho = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar operación"
+        ):
+            return None
+
+        if operador in {">", "<", ">=", "<=", "="}:
+            tipo_nodo = "Comparacion"
+        else:
+            tipo_nodo = "Operacion"
+
+        nodo = NodoAST(tipo_nodo, operador)
+
+        nodo.agregar_hijo(izquierdo)
+        nodo.agregar_hijo(derecho)
+
+        return nodo
+
+    def recuperar_parentesis(self):
+
+        profundidad = 1
 
         while self.actual().tipo != "EOF":
 
-            t = self.actual()
+            t = self.avanzar()
 
             if t.valor == "(":
                 profundidad += 1
 
             elif t.valor == ")":
-                if profundidad == 0:
-                    break
                 profundidad -= 1
 
-            self.avanzar()
-
-        # Comprobar cierre de paréntesis
-        if not self.esperar("DELIMITADOR", ")", "')' después de la condición"):
-            return
-
-        # Analizar el bloque del if
-        self.bloque()
-
-    
-    def retorno(self):
-        # Consumir la palabra reservada return
-        self.avanzar()
-
-        # Si no hay un punto y coma, analizar el valor de retorno
-        if self.actual().valor != ";":
-            self.expresion()
-
-        self.punto_coma("return")
-
-
-    def declaracion(self):
-        tipo = self.avanzar()
-        nombre = self.actual()
-
-        if nombre.tipo == "ID_INVALIDO":
-            self.avanzar()
-            self.errores.append(
-                f"Error léxico/sintáctico línea {nombre.linea}: "
-                f"nombre de variable inválido {nombre.valor!r}."
-            )
-            self.recuperar()
-            return
-
-        if nombre.tipo != "ID":
-            self.errores.append(
-                f"Error sintáctico línea {nombre.linea}: se esperaba un identificador "
-                "después del tipo de dato."
-            )
-            self.recuperar()
-            return
-
-        self.avanzar()
-
-        ambito_actual = self.ambitos[-1]
-        if nombre.valor in ambito_actual:
-            previo = ambito_actual[nombre.valor]
-
-            self.advertencias.append(
-                f"Warning línea {nombre.linea}: variable "
-                f"{nombre.valor!r} declarada más de una vez "
-                f"en el mismo ámbito (línea {previo['linea']})."
-            )
-
-        else:
-            informacion = {
-                "nombre": nombre.valor,
-                "tipo": tipo.valor,
-                "linea": nombre.linea,
-                "ambito": len(self.ambitos) - 1
-            }
-            ambito_actual[nombre.valor] = informacion
-            # Registrar todas las declaraciones
-            self.tabla.append(informacion)
-            
-        if self.aceptar("OPERADOR", "="):
-            tipo_valor = self.expresion()
-            self.comprobar_tipo(tipo.valor, tipo_valor, nombre.valor, tipo.linea)
-        self.punto_coma("declaración")
-
-
-    def asignacion(self):
-        nombre = self.avanzar()
-
-        operadores_asignacion = {
-            "=", "+=", "-=", "*=", "/=", "%="
-        }
-
-        operador = self.actual()
-
-        if operador.tipo != "OPERADOR" or operador.valor not in operadores_asignacion:
-            self.errores.append(
-                f"Error sintáctico línea {nombre.linea}: "
-                f"se esperaba un operador de asignación después de {nombre.valor!r}."
-            )
-            self.recuperar()
-            return
-
-        self.avanzar()
-
-        tipo_valor = self.expresion()
-
-        
-        variable = self.buscar_variable(nombre.valor)
-
-        if variable is None:
-            self.advertencias.append(
-                f"Warning undefined variable línea {nombre.linea}: "
-                f"la variable {nombre.valor!r} no ha sido declarada."
-            )
-        else:
-            tipo_variable = variable["tipo"]
-
-            self.comprobar_tipo(
-                tipo_variable,
-                tipo_valor,
-                nombre.valor,
-                nombre.linea
-            )
-
-        self.punto_coma("asignación")
-
-    def impresion(self):
-        funcion = self.avanzar()
-        self.esperar("DELIMITADOR", "(", "'(' después de print")
-        if self.actual().valor != ")":
-            self.expresion()
-        self.esperar("DELIMITADOR", ")", "')' para cerrar print")
-        self.punto_coma(funcion.valor)
-
-    def expresion(self, minimo=0):
-        tipo_izq = self.primario()
-        prioridad = {"+": 1, "-": 1, "*": 2, "/": 2}
-
-        while self.actual().tipo == "OPERADOR":
-            op = self.actual().valor
-            p = prioridad.get(op, -1)
-            if p < minimo:
-                break
-            self.avanzar()
-            tipo_der = self.expresion(p + 1)
-            if "double" in {tipo_izq, tipo_der}:
-                tipo_izq = "double"
-            elif tipo_izq is None:
-                tipo_izq = tipo_der
-        return tipo_izq
-
-    def primario(self):
-        t = self.actual()
-        if t.tipo == "NUMERO":
-            self.avanzar()
-            return "double" if "." in t.valor else "int"
-        if t.tipo == "CADENA":
-            self.avanzar()
-            return "str"
-        if t.tipo == "CARACTER":
-            self.avanzar()
-            return "char"
-        if t.valor in {"true", "false"}:
-            self.avanzar()
-            return "bool"
-        if t.tipo == "ID":
-            self.avanzar()
-            variable = self.buscar_variable(t.valor)
-            if variable is not None:
-                return variable["tipo"]
-            self.advertencias.append(
-                f"Warning undefined variable línea {t.linea}: "
-                f"{t.valor!r} se utiliza sin declaración."
-            )
-            return None
-        if self.aceptar("DELIMITADOR", "("):
-            tipo = self.expresion()
-            self.esperar("DELIMITADOR", ")", "')' para cerrar expresión")
-            return tipo
-
-        self.errores.append(
-            f"Error sintáctico línea {t.linea}: se esperaba constante, "
-            f"variable o expresión; se encontró {t.valor!r}."
-        )
-        if t.tipo != "EOF" and t.valor not in {";", ")", "}"}:
-            self.avanzar()
-        return None
-    
-    def comprobar_tipo(self, declarado, recibido, nombre, linea):
-        if recibido is None:
-            return
-
-        compatibles = {
-            "int": {"int"},
-            "double": {"int", "double"},
-            "float": {"int", "float"},
-            "str": {"str", "string"},
-            "string": {"str", "string"},
-            "char": {"char"},
-            "bool": {"bool", "int"},
-        }
-
-        if recibido not in compatibles.get(declarado, {declarado}):
-            self.errores.append(
-                f"Error semántico línea {linea}: valor de tipo {recibido!r} "
-                f"asignado a {nombre!r}, declarado como {declarado!r}."
-            )
-
-    def punto_coma(self, instruccion):
-        if not self.aceptar("DELIMITADOR", ";"):
-            t = self.actual()
-            self.advertencias.append(
-                f"Warning end instruction línea {t.linea}: falta ';' "
-                f"al final de {instruccion}."
-            )
-
-    def recuperar(self):
-        while self.actual().tipo != "EOF" and self.actual().valor not in {";", "}"}:
-            self.avanzar()
-        self.aceptar("DELIMITADOR", ";")
+                if profundidad == 0:
+                    break
 
 
 """ este ejecuta ensenando todo el analisis, el otro solo el warning
@@ -984,7 +790,8 @@ def ejecutar(ruta_entrada, ruta_salida=None):
     return reporte
 #"""
 
-def analizar_codigo(codigo):
+
+def analizar_codigo(codigo, devolver_ast=False):
 
     # 1. ANÁLISIS LÉXICO
     tokens, errores_lexicos = AnalizadorLexico().analizar(codigo)
@@ -1021,7 +828,13 @@ def analizar_codigo(codigo):
     else:
         salida.append("\nANÁLISIS FINALIZADO CORRECTAMENTE.")
 
-    return "\n".join(salida)
+    reporte = "\n".join(salida)
+
+    # 5. DEVOLVER REPORTE Y AST SI SE SOLICITA
+    if devolver_ast:
+        return reporte, sintactico.arbol
+
+    return reporte
 
 
 if __name__ == "__main__":

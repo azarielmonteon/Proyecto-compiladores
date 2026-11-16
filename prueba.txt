@@ -1,13 +1,5 @@
-#include <stdio>
+(define edad 20)
 
-main() {
-    int edad = 20;
-
-    if (edad >= 18) {
-        int edad = 30;
-        edad = "hola";
-    }
-
-    edad = 50;
-    edad = "mundo";
-}
+(if (> edad 18)
+    (display "Mayor de edad")
+    (display "Menor de edad"))

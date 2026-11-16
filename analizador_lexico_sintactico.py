@@ -477,6 +477,18 @@ class AnalizadorSintactico:
             if funcion.valor == "list":
                 return self.crear_lista(funcion)
 
+            # CREACIÓN DE VECTORES
+            if funcion.valor == "vector":
+                return self.crear_vector(funcion)
+
+            # OBTENER TAMAÑO DE UN VECTOR
+            if funcion.valor == "vector-length":
+                return self.longitud_vector(funcion)
+            if funcion.valor == "vector-ref":
+                return self.acceso_vector(funcion)    
+
+            if funcion.valor == "vector-set!":
+                return self.asignacion_vector(funcion)      
             # OBTENER TAMAÑO DE UNA LISTA
             if funcion.valor == "length":
                 return self.longitud_lista(funcion)
@@ -845,6 +857,81 @@ class AnalizadorSintactico:
 
         return nodo
 
+
+    def crear_vector(self, token):
+
+        nodo = NodoAST("Vector")
+
+        # Leer los elementos del vector
+        while (
+            self.actual().tipo != "EOF"
+            and self.actual().valor != ")"
+        ):
+
+            antes = self.i
+            elemento = self.expresion()
+
+            if elemento is not None:
+                nodo.agregar_hijo(elemento)
+
+            if self.i == antes:
+                self.avanzar()
+
+        # Cerrar vector
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar vector"
+        ):
+            return None
+
+        return nodo
+
+    def longitud_vector(self, token):
+
+        expresion = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar vector-length"
+        ):
+            return None
+
+        nodo = NodoAST("LongitudVector")
+        nodo.agregar_hijo(expresion)
+
+        return nodo
+
+    def acceso_vector(self, token):
+        vector = self.expresion()
+        indice = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar vector-ref"
+        ):
+            return None
+
+        nodo = NodoAST("AccesoVector")
+        nodo.agregar_hijo(vector)
+        nodo.agregar_hijo(indice)
+
+        return nodo
+
+    def asignacion_vector(self, token):
+
+        vector = self.expresion()
+        indice = self.expresion()
+        valor = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar vector-set!"
+        ):
+            return None
+
+        nodo = NodoAST("AsignacionVector")
+
+        nodo.agregar_hijo(vector)
+        nodo.agregar_hijo(indice)
+        nodo.agregar_hijo(valor)
+
+        return nodo
 
     def impresion(self, token):
 

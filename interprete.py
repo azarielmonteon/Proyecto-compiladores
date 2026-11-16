@@ -160,6 +160,24 @@ class Interprete:
 
             self.variables[nombre] = valor
 
+
+        elif nodo.tipo == "AsignacionVector":
+
+            vector = self.evaluar_expresion(nodo.hijos[0])
+            indice = self.evaluar_expresion(nodo.hijos[1])
+            valor = self.evaluar_expresion(nodo.hijos[2])
+
+            if not isinstance(vector, list):
+                raise Exception("La función vector-set! necesita un vector.")
+
+            if not isinstance(indice, int):
+                raise Exception("El índice del vector debe ser un entero.")
+
+            if indice < 0 or indice >= len(vector):
+                raise Exception("Índice fuera de los límites del vector.")
+
+            vector[indice] = valor
+
     # Evaluar expresiones
     def evaluar_expresion(self, nodo):
 
@@ -201,6 +219,39 @@ class Interprete:
                 elementos.append(valor)
 
             return elementos
+
+        elif nodo.tipo == "Vector":
+
+            elementos = []
+
+            for hijo in nodo.hijos:
+                valor = self.evaluar_expresion(hijo)
+                elementos.append(valor)
+
+            return elementos
+
+        elif nodo.tipo == "LongitudVector":
+            vector = self.evaluar_expresion(nodo.hijos[0])
+
+            if not isinstance(vector, list):
+                raise Exception("La función vector-length necesita un vector.")
+
+            return len(vector)
+
+        elif nodo.tipo == "AccesoVector":
+            vector = self.evaluar_expresion(nodo.hijos[0])
+            indice = self.evaluar_expresion(nodo.hijos[1])
+
+            if not isinstance(vector, list):
+                raise Exception("La función vector-ref necesita un vector.")
+
+            if not isinstance(indice, int):
+                raise Exception("El índice del vector debe ser un entero.")
+
+            if indice < 0 or indice >= len(vector):
+                raise Exception("Índice fuera de los límites del vector.")
+
+            return vector[indice]
 
         elif nodo.tipo == "LongitudLista":
 

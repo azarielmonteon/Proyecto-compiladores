@@ -21,7 +21,7 @@ PALABRAS_RESERVADAS = {
         "for", "while"
     ],
 
-    "tipos": [
+    "tipos": ["vector", "vector-lenght"
     ],
 
     "modificadores": [

@@ -1,2 +1,26 @@
-(for (i 1 5)
-    (display i))
+(define numeros (vector 5 3 8 1 2))
+(define n (vector-length numeros))
+
+(for (i 0 (- n 2))
+    (begin
+        (for (j 0 (- (- n 2) i))
+            (begin
+                (if (> (vector-ref numeros j)
+                       (vector-ref numeros (+ j 1)))
+                    (begin
+                        (define temporal (vector-ref numeros j))
+
+                        (vector-set! numeros j
+                            (vector-ref numeros (+ j 1)))
+
+                        (vector-set! numeros (+ j 1) temporal)
+                    )
+                    0
+                )
+            )
+        )
+    )
+)
+
+(display "Vector ordenado:")
+(display numeros)

@@ -1,14 +1,4 @@
-(define calificacion 5.9999999999999999999999999999999999999999999999999999999999)
+(define numeros (list 5 3 8 1 2))
 
-(cond
-    ((>= calificacion 9.5)
-        (display "Excelente"))
-
-    ((>= calificacion 8.0)
-        (display "Muy bien"))
-
-    ((>= calificacion 6.0)
-        (display "Aprobado"))
-
-    (else
-        (display "Reprobado")))
+(display "Cantidad de elementos:")
+(display (length numeros))

@@ -32,7 +32,9 @@ class AnalizadorLexico:
         "begin",
         "lambda",
         "cond",
-        "else"
+        "else",
+        "for",
+        "while"
     }
     # Operadores matemáticos y relacionales
     OPERADORES = {
@@ -453,6 +455,10 @@ class AnalizadorSintactico:
                 return self.definicion(funcion)
             if funcion.valor == "cond":
                 return self.condicional_multiple(funcion)
+            if funcion.valor == "for":
+                return self.ciclo_for(funcion)
+            if funcion.valor == "while":
+                return self.ciclo_while(funcion)
             if funcion.valor == "set!":
                 return self.asignacion(funcion)
             # CONDICIONAL IF
@@ -466,6 +472,14 @@ class AnalizadorSintactico:
             # IMPRESIÓN DISPLAY
             if funcion.valor == "display":
                 return self.impresion(funcion)
+
+            # CREACIÓN DE LISTAS
+            if funcion.valor == "list":
+                return self.crear_lista(funcion)
+
+            # OBTENER TAMAÑO DE UNA LISTA
+            if funcion.valor == "length":
+                return self.longitud_lista(funcion)
 
             # OPERACIONES MATEMÁTICAS Y COMPARACIONES
             if funcion.valor in {
@@ -673,6 +687,99 @@ class AnalizadorSintactico:
 
         return nodo
 
+
+    def ciclo_for(self, token):
+
+        # Abrir los parámetros del ciclo
+        if not self.esperar(
+            "DELIMITADOR", "(", "'(' para iniciar parámetros de for"
+        ):
+            self.recuperar_parentesis()
+            return None
+
+        # Obtener variable de control
+        variable = self.actual()
+
+        if variable.tipo != "ID":
+            self.errores.append(
+                f"Error sintáctico línea {variable.linea}: "
+                "se esperaba una variable de control en for."
+            )
+            self.recuperar_parentesis()
+            return None
+
+        self.avanzar()
+
+        # Obtener valor inicial
+        inicio = self.expresion()
+
+        # Obtener valor final
+        fin = self.expresion()
+
+        # Obtener incremento opcional
+        if self.actual().valor != ")":
+            incremento = self.expresion()
+        else:
+            incremento = NodoAST("Numero", "1")
+
+        # Cerrar parámetros
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar parámetros de for"
+        ):
+            return None
+
+        # Registrar variable de control
+        informacion = {
+            "nombre": variable.valor,
+            "tipo": "int",
+            "linea": variable.linea,
+            "ambito": len(self.ambitos) - 1
+        }
+
+        self.ambitos[-1][variable.valor] = informacion
+        self.tabla.append(informacion)
+
+        # Crear nodo del ciclo
+        nodo = NodoAST("CicloFor", variable.valor)
+        nodo.agregar_hijo(inicio)
+        nodo.agregar_hijo(fin)
+        nodo.agregar_hijo(incremento)
+
+        # Analizar cuerpo
+        cuerpo = self.expresion()
+
+        nodo.agregar_hijo(cuerpo)
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar for"
+        ):
+            return None
+
+        return nodo
+
+
+    
+    def ciclo_while(self, token):
+
+        # Analizar condición
+        condicion = self.expresion()
+
+        # Crear nodo del ciclo
+        nodo = NodoAST("CicloWhile")
+        nodo.agregar_hijo(condicion)
+
+        # Analizar cuerpo
+        cuerpo = self.expresion()
+        nodo.agregar_hijo(cuerpo)
+
+        # Cerrar estructura while
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar while"
+        ):
+            return None
+
+        return nodo
+
     def bloque_begin(self, token):
 
         nodo = NodoAST("Bloque", "begin")
@@ -696,6 +803,48 @@ class AnalizadorSintactico:
         )
 
         return nodo
+
+    def longitud_lista(self, token):
+
+        expresion = self.expresion()
+
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar length"
+        ):
+            return None
+
+        nodo = NodoAST("LongitudLista")
+        nodo.agregar_hijo(expresion)
+
+        return nodo
+
+    def crear_lista(self, token):
+
+        nodo = NodoAST("Lista")
+
+        # Leer los elementos de la lista
+        while (
+            self.actual().tipo != "EOF"
+            and self.actual().valor != ")"
+        ):
+
+            antes = self.i
+            elemento = self.expresion()
+
+            if elemento is not None:
+                nodo.agregar_hijo(elemento)
+
+            if self.i == antes:
+                self.avanzar()
+
+        # Cerrar lista
+        if not self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar list"
+        ):
+            return None
+
+        return nodo
+
 
     def impresion(self, token):
 

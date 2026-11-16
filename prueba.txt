@@ -1,5 +1,2 @@
-(define edad 20)
-
-(if (> edad 18)
-    (display "Mayor de edad")
-    (display "Menor de edad"))
+(for (i 1 5)
+    (display i))

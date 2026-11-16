@@ -74,6 +74,73 @@ class Interprete:
                         self.ejecutar_nodo(expresion, salida)
                     break
 
+
+
+        elif nodo.tipo == "CicloFor":
+
+            nombre = nodo.valor
+
+            inicio = self.evaluar_expresion(nodo.hijos[0])
+            fin = self.evaluar_expresion(nodo.hijos[1])
+            incremento = self.evaluar_expresion(nodo.hijos[2])
+
+            cuerpo = nodo.hijos[3]
+
+            variable_existia = nombre in self.variables
+
+            if variable_existia:
+                valor_anterior = self.variables[nombre]
+
+            if incremento == 0:
+                raise Exception(
+                    "El incremento del ciclo for no puede ser cero."
+                )
+
+            if incremento > 0:
+
+                i = inicio
+
+                while i <= fin:
+
+                    self.variables[nombre] = i
+
+                    self.ejecutar_nodo(cuerpo, salida)
+
+                    i += incremento
+
+            else:
+
+                i = inicio
+
+                while i >= fin:
+
+                    self.variables[nombre] = i
+
+                    self.ejecutar_nodo(cuerpo, salida)
+
+                    i += incremento
+
+            # Restaurar el valor original de la variable
+            if variable_existia:
+                self.variables[nombre] = valor_anterior
+            else:
+                del self.variables[nombre]
+
+
+
+
+        elif nodo.tipo == "CicloWhile":
+
+            condicion = nodo.hijos[0]
+            cuerpo = nodo.hijos[1]
+
+            # Ejecutar mientras la condición sea verdadera
+            while self.evaluar_expresion(condicion) is not False:
+
+                self.ejecutar_nodo(cuerpo, salida)
+
+
+
         elif nodo.tipo == "Asignacion":
 
             nombre = nodo.valor
@@ -92,6 +159,7 @@ class Interprete:
             valor = self.evaluar_expresion(expresion)
 
             self.variables[nombre] = valor
+
     # Evaluar expresiones
     def evaluar_expresion(self, nodo):
 
@@ -123,6 +191,27 @@ class Interprete:
         elif nodo.tipo == "Booleano":
 
             return nodo.valor == "true"
+
+        elif nodo.tipo == "Lista":
+
+            elementos = []
+
+            for hijo in nodo.hijos:
+                valor = self.evaluar_expresion(hijo)
+                elementos.append(valor)
+
+            return elementos
+
+        elif nodo.tipo == "LongitudLista":
+
+            lista = self.evaluar_expresion(nodo.hijos[0])
+
+            if not isinstance(lista, list):
+                raise Exception(
+                    "La función length necesita una lista."
+                )
+
+            return len(lista)
 
         elif nodo.tipo == "Operacion":
 

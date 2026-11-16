@@ -15,42 +15,33 @@ BG_TERMINAL = "#11111b"
 
 
 # PALABRAS RESERVADAS DEL LENGUAJE
-
 PALABRAS_RESERVADAS = {
     "control": [
-        "if", "else", "switch", "case", "default",
-        "for", "while", "do", "break", "continue",
-        "goto", "return"
+        "if", "cond", "else",
+        "for", "while"
     ],
 
     "tipos": [
-        "void", "char", "short", "int", "long",
-        "float", "double", "signed", "unsigned",
-        "bool", "wchar_t", "auto"
     ],
 
-
     "modificadores": [
-        "const", "static", "extern", "volatile",
-        "register", "inline", "restrict",
-        "constexpr", "mutable", "virtual",
-        "explicit", "friend", "typename"
+        "define", "set!"
     ],
 
     "cpp": [
-        "class", "public", "private", "protected",
-        "namespace", "using", "new", "delete",
-        "this", "operator", "template", "try",
-        "catch", "throw", "nullptr", "override",
-        "final", "noexcept", "decltype"
+        "begin", "lambda"
     ],
 
     "otros": [
-        "struct", "union", "enum", "typedef",
-        "sizeof", "static_assert", "alignof",
         "true", "false"
     ],
-    "imprecion":["print","printf"]
+
+    "imprecion": [
+        "display"
+    ],
+    "listas":[
+        "numeros","list"
+    ]
 }
 
 
@@ -303,9 +294,10 @@ COLORES_RESERVADAS = {
     "tipos": "#89b4fa",
     "modificadores": "#f9e2af",
     "cpp": "#fab387",
-    "otros": "#a6e3a1"
+    "otros": "#a6e3a1",
+    "imprecion": "#f5c2e7",
+    "listas": "#f400f6"
 }
-
 
 # RECONOCIMIENTO DE PALABRAS RESERVADAS
 
@@ -347,7 +339,7 @@ def actualizar_resaltado(event=None):
         )
 
         patrones.append(
-            rf"(?P<{categoria}>\b(?:{palabras_regex})\b)"
+           rf"(?P<{categoria}>(?<!\w)(?:{palabras_regex})(?!\w))"
         )
 
     patron = re.compile("|".join(patrones))

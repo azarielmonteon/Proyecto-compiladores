@@ -1,8 +1,14 @@
-(define numero 5)
+(define calificacion 5.9999999999999999999999999999999999999999999999999999999999)
 
-(begin
-    (display "Valor inicial:")
-    (display numero)
-    (set! numero 10)
-    (display "Nuevo valor:")
-    (display numero))
+(cond
+    ((>= calificacion 9.5)
+        (display "Excelente"))
+
+    ((>= calificacion 8.0)
+        (display "Muy bien"))
+
+    ((>= calificacion 6.0)
+        (display "Aprobado"))
+
+    (else
+        (display "Reprobado")))

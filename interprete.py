@@ -1,3 +1,4 @@
+from decimal import Decimal
 
 class Interprete:
 
@@ -53,6 +54,26 @@ class Interprete:
             else:
                 self.ejecutar_nodo(nodo.hijos[2], salida)
 
+        elif nodo.tipo == "CondicionalMultiple":
+
+            for caso in nodo.hijos:
+
+                condicion = caso.hijos[0]
+
+                # Caso alternativo
+                if condicion.tipo == "Else":
+                    for expresion in caso.hijos[1:]:
+                        self.ejecutar_nodo(expresion, salida)
+                    break
+
+                # Evaluar condición
+                resultado = self.evaluar_expresion(condicion)
+
+                if resultado is not False:
+                    for expresion in caso.hijos[1:]:
+                        self.ejecutar_nodo(expresion, salida)
+                    break
+
         elif nodo.tipo == "Asignacion":
 
             nombre = nodo.valor
@@ -80,7 +101,7 @@ class Interprete:
         if nodo.tipo == "Numero":
 
             if "." in nodo.valor:
-                return float(nodo.valor)
+                return Decimal(nodo.valor)
 
             return int(nodo.valor)
 

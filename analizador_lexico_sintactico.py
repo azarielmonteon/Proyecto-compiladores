@@ -30,9 +30,10 @@ class AnalizadorLexico:
         "define",
         "set!",
         "begin",
-        "lambda"
+        "lambda",
+        "cond",
+        "else"
     }
-
     # Operadores matemáticos y relacionales
     OPERADORES = {
         "+", "-", "*", "/",
@@ -450,6 +451,8 @@ class AnalizadorSintactico:
             # DEFINICIÓN DE VARIABLES
             if funcion.valor == "define":
                 return self.definicion(funcion)
+            if funcion.valor == "cond":
+                return self.condicional_multiple(funcion)
             if funcion.valor == "set!":
                 return self.asignacion(funcion)
             # CONDICIONAL IF
@@ -619,6 +622,54 @@ class AnalizadorSintactico:
         nodo.agregar_hijo(condicion)
         nodo.agregar_hijo(verdadero)
         nodo.agregar_hijo(falso)
+
+        return nodo
+    
+    def condicional_multiple(self, token):
+
+        nodo = NodoAST("CondicionalMultiple", "cond")
+
+        while (
+            self.actual().tipo != "EOF"
+            and self.actual().valor == "("
+        ):
+
+            self.avanzar()
+
+            condicion = self.actual()
+
+            if condicion.valor == "else":
+                self.avanzar()
+                condicion_nodo = NodoAST("Else", "else")
+            else:
+                condicion_nodo = self.expresion()
+
+            bloque = NodoAST("Caso")
+
+            bloque.agregar_hijo(condicion_nodo)
+
+            while (
+                self.actual().tipo != "EOF"
+                and self.actual().valor != ")"
+            ):
+                antes = self.i
+                expresion = self.expresion()
+
+                if expresion is not None:
+                    bloque.agregar_hijo(expresion)
+
+                if self.i == antes:
+                    self.avanzar()
+
+            self.esperar(
+                "DELIMITADOR", ")", "')' para cerrar caso"
+            )
+
+            nodo.agregar_hijo(bloque)
+
+        self.esperar(
+            "DELIMITADOR", ")", "')' para cerrar cond"
+        )
 
         return nodo
 
